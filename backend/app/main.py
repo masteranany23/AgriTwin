@@ -62,6 +62,7 @@ from backend.app.scenario.api.scenario_routes import router as scenario_router
 from backend.app.assimilation.api.observation_routes import router as observations_router
 from backend.app.assimilation.api.assimilation_routes import router as assimilation_router
 from backend.app.satellite.api.routes import router as satellite_router
+from backend.app.api.routes.fusion import router as fusion_router
 from backend.app.db.session import create_tables
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -114,6 +115,14 @@ app = FastAPI(
                 "Sentinel-2 satellite, soil moisture sensors, weather stations, "
                 "manual field scouts, and model-derived pseudo-observations. "
                 "Observation records are the data foundation for future EnKF assimilation."
+            ),
+        },
+        {
+            "name": "Data Fusion (Module 3.3)",
+            "description": (
+                "Complete data fusion pipeline: temporal interpolation with cloud-gap detection, "
+                "spatial alignment, confidence estimation, and multi-source Bayesian fusion. "
+                "Combines satellite, weather, and ground observations into unified high-quality data streams."
             ),
         },
         {
@@ -194,6 +203,12 @@ app.include_router(
     assimilation_router,
     prefix="/assimilation",
     tags=["Assimilation"],
+)
+ 
+app.include_router(
+    fusion_router,
+    prefix="/fusion",
+    tags=["Data Fusion (Module 3.3)"],
 )
 
 
