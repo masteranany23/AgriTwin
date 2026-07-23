@@ -1,314 +1,154 @@
-**🌾 AgriTwin — Agricultural Digital Twin Platform**
+# AgriTwin — Agricultural Digital Twin Platform
 
-> **A modular, physics-guided AI Digital Twin Platform for precision agriculture. Fuses process-based crop simulation (WOFOST), multi-source Earth observation data, and sequential data assimilation (EnKF) to create a continuously self-correcting virtual replica of crop fields.**
-
-
-## 🌟 Overview & Vision
-
-### What Is AgriTwin?
-
-Imagine having a **digital mirror of your farm field** on your computer. Just like a navigation app predicts traffic using live road data, AgriTwin predicts **crop growth, water needs, and potential yields** by combining:
-
-1. **🔬 Physics-Based Science** — The WOFOST crop growth model simulates daily phenology, water balance, and dry matter accumulation.
-2. **🛰️ Real-World Observations** — Sentinel-2 satellites (NDRE/LAI) and smartphone photos (GRVI) provide reality checks.
-3. **🧠 Self-Correcting AI** — The Ensemble Kalman Filter (EnKF) continuously nudges the virtual model back to reality without overreacting to noisy data.
-
-### Who Is This For?
-
-| **Audience** | **How They Use AgriTwin** |
-|-------------|---------------------------|
-| **Researchers** | Validate new crop models, test assimilation strategies, analyze 75-year back-casts. |
-| **Developers** | Extend modules (new data sources, ML models, visualization layers). |
-| **Agronomists / FPOs** | Run "what-if" scenarios (sowing dates, irrigation plans) for advisory services. |
-| **Farmers** | Access predictions via the UI (smartphone scout sessions, yield forecasts). |
+> **A physics-based crop simulation digital twin platform that fuses process-based models with real-world geospatial data and sequential data assimilation via the Ensemble Kalman Filter (EnKF).**
 
 ---
 
-## 🧬 The Research Foundation
+## 🌟 What Is AgriTwin?
 
-AgriTwin is built on **peer-reviewed science** adapted for smallholder agriculture. The table below summarizes the key research pillars and their implementation status.
+AgriTwin is an advanced research and engineering platform designed to build a **real-time digital twin of crop fields**. By combining physical process-based simulation models with incoming real-world satellite and sensor observations, AgriTwin constantly adjusts and aligns its predictions to mirror physical reality.
 
-### Core Scientific Decisions
-
-| **Research Pillar** | **Source** | **Decision** | **Implementation** | **Key Result** |
-|---------------------|------------|--------------|-------------------|----------------|
-| **Option A: Multi-Model Ensemble** | *J. Hydrology* (2025), AERU (2010) | ❌ **Rejected** | DSSAT/AquaCrop require MCMC calibration & 40+ genetic coefficients. 0% adoption in smallholder contexts. | N/A |
-| **Option B: E-WOFOST (4-layer SM)** | *Computers & Electronics in Ag.* (2025) | ✅ **Adopted** | ERA5-Land provides 4-layer soil moisture (0-7, 7-28, 28-100, 100-289 cm). Joint LAI+SM assimilation. | **R² = 0.85–0.90**, RMSE = 441–741 kg/ha |
-| **Option C: NDRE (Satellite)** | Sentinel-2 Red Edge bands | ✅ **Adopted** | `NDRE = (NIR - RedEdge) / (NIR + RedEdge)` using B08 & B07. Confidence scoring (0.85 clear / 0.0 cloudy). | Detects N-stress without saturating at high LAI |
-| **Option D: GRVI (Smartphone)** | *Plants* (2024) | ✅ **Adopted** | `GRVI = (Green - Red) / (Green + Red)`. W-Shape protocol (5 photos). **30% observation error** ("Gentle Nudge"). | R² > 0.85 with SPAD. Replaces ₹40,000 chlorophyll meters. |
-| **Option E: ERA5-Land** | *ESSD* (2021) | ✅ **Adopted (Hybrid)** | ERA5-Land (>60 days) + NASA POWER (<60 days & forecasts). | 9 km, hourly, 4-layer SM, 1950+ coverage |
-| **EnKF (Data Assimilation)** | Ensemble Kalman Filter | ✅ **Adopted** | 25-member ensemble. Matrix Kalman Gain (covariance of LAI, SM, WLV, WST, WRT, WSO). | Prevents model drift, corrects input biases |
-| **XGBoost Bias Correction** | *MDPI Agriculture* (2025) | ✅ **Adopted** | 75-year ERA5-Land back-cast (1950–2025). Predicts WOFOST residual errors. | County-level: r = 0.659, RMSE = 578 kg/ha |
+The core platform workflows include:
+1. **Physical Crop Growth Simulation**: Run the WOFOST (World Food Studies) model to track daily phenology, water balance, and dry matter accumulation under water-limited conditions.
+2. **Geospatial Grounding**: Automatically fetch daily weather (NASA POWER API) and soil hydraulic properties (ISRIC SoilGrids v2.0) for any GPS coordinate on Earth, with transparent file-based JSON caching.
+3. **Deterministic Scenario Sweeps**: Evaluate agricultural strategies (sowing dates, variety selection, irrigation plans) using a comparative Scenario Engine.
+4. **Closed-Loop Data Assimilation (EnKF)**: Fuses satellite Leaf Area Index (LAI) and Soil Moisture (SM) observations into the running simulation using the Ensemble Kalman Filter to correct for systematic input biases and forecast drift.
 
 ---
 
-### 🇮🇳 India-Specific Research Adaptations
+## 📐 Logical Architecture Flow
 
-AgriTwin is designed for **Indian smallholder farmers** (average 2.5 acres, ₹15,000–₹20,000 annual income). These adaptations are *research-driven* to overcome local constraints:
-
-| **Challenge** | **Technical Adaptation** | **Implementation** | **Research Basis** |
-|---------------|-------------------------|-------------------|-------------------|
-| **Monsoon Cloud Cover** (>70% Jun–Sept) | Confidence drops to 0.0 → `HOLD_OPEN_LOOP` trigger. ERA5-Land gap-filling when gaps > 10 days. | `TemporalInterpolationService._apply_gap_masking()` | Option C |
-| **Fragmented Land Holdings** (2.5 acres avg) | W-Shape protocol (5 photos) with GPS EXIF. Spatial Alignment snaps points to 10m grid. | `scout_sessions.py`, `spatial_alignment_service.py` | Option D |
-| **No NIR Sensor on Phones** | Uses GRVI = (G - R)/(G + R) instead of NDVI. | `scout_sessions.py._calculate_grvi()` | Option D |
-| **Low-Cost, Offline Constraints** | 30MB upload limit. Compressed to 1280×1280 (80% storage reduction). Background processing. | `scout_sessions.py._compress_image()` | Operational resilience |
-| **Crop Diversity** (>100 crops) | Crop-specific extinction coefficients: wheat (k=0.45), rice (k=0.55), maize (k=0.50). | `satellite_fetcher.py.CROP_K_COEFFICIENTS` | E-WOFOST calibration |
-
-#### How AgriTwin Reduces WOFOST Dependency
-
-| **WOFOST's Weakness** | **Our Correction Strategy** | **How It Reduces WOFOST Dependency** |
-|----------------------|---------------------------|-------------------------------------|
-| **N-Mineralization Flaw** (Cambridge 2015) | Farmer's phone GRVI + Sentinel-2 NDRE | **Bypass WOFOST's N-logic entirely.** Use plant's actual greenness instead of soil nitrogen guesses. |
-| **Single-Layer Soil Water** (E-WOFOST 2025) | ERA5-Land 4-layer SM (0-7cm to 100cm) | **Replace "single bucket" with 4 real layers.** WOFOST follows satellite/reanalysis data. |
-| **Missing Extreme Heat Spikes** | ERA5-Land hourly temperature | **Expose WOFOST to actual 2-hour heat spikes.** Feed hour-by-hour reality instead of daily averages. |
-| **Systematic Yield Bias** (Cambridge 2015) | XGBoost learns 75-year residuals | **Let AI handle correction.** Predict the error and subtract it from WOFOST's output. |
-
----
-
-### 🧬 Research-to-Code Implementation Map
-
-For researchers and developers: here is exactly where each scientific component lives in the codebase.
-### Core Scientific Decisions
-
-| **Research Pillar** | **Source** | **Decision** | **Implementation** | **Key Result** |
-|---------------------|------------|--------------|-------------------|----------------|
-| **Option A: Multi-Model Ensemble** | *J. Hydrology* (2025), AERU (2010) | ❌ **Rejected** | DSSAT/AquaCrop require MCMC calibration & 40+ genetic coefficients. 0% adoption in smallholder contexts. | N/A |
-| **Option B: E-WOFOST (4-layer SM)** | *Computers & Electronics in Ag.* (2025) | ✅ **Adopted** | ERA5-Land provides 4-layer soil moisture (0-7, 7-28, 28-100, 100-289 cm). Joint LAI+SM assimilation. | **R² = 0.85–0.90**, RMSE = 441–741 kg/ha |
-| **Option C: NDRE (Satellite)** | Sentinel-2 Red Edge bands | ✅ **Adopted** | `NDRE = (NIR - RedEdge) / (NIR + RedEdge)` using B08 & B07. Confidence scoring (0.85 clear / 0.0 cloudy). | Detects N-stress without saturating at high LAI |
-| **Option D: GRVI (Smartphone)** | *Plants* (2024) | ✅ **Adopted** | `GRVI = (Green - Red) / (Green + Red)`. W-Shape protocol (5 photos). **30% observation error** ("Gentle Nudge"). | R² > 0.85 with SPAD. Replaces ₹40,000 chlorophyll meters. |
-| **Option E: ERA5-Land** | *ESSD* (2021) | ✅ **Adopted (Hybrid)** | ERA5-Land (>60 days) + NASA POWER (<60 days & forecasts). | 9 km, hourly, 4-layer SM, 1950+ coverage |
-| **EnKF (Data Assimilation)** | Ensemble Kalman Filter | ✅ **Adopted** | 25-member ensemble. Matrix Kalman Gain (covariance of LAI, SM, WLV, WST, WRT, WSO). | Prevents model drift, corrects input biases |
-| **XGBoost Bias Correction** | *MDPI Agriculture* (2025) | ✅ **Adopted** | 75-year ERA5-Land back-cast (1950–2025). Predicts WOFOST residual errors. | County-level: r = 0.659, RMSE = 578 kg/ha |
-
-#### Satellite Vegetation Indices Comparison
-
-| **Index** | **Formula** | **Best Use Case** |
-|-----------|-------------|-------------------|
-| **NDVI** | `(NIR - Red) / (NIR + Red)` | General crop health; **saturates at high LAI** |
-| **EVI** | `2.5 × (NIR - Red) / (NIR + 6Red - 7.5Blue + 1)` | High LAI regions; corrects for atmosphere & soil |
-| **GNDVI** | `(NIR - Green) / (NIR + Green)` | **Chlorophyll/Nitrogen sensitivity** (better than NDVI) |
-| **NDRE** | `(NIR - RedEdge) / (NIR + RedEdge)` | **Most sensitive to canopy chlorophyll**; does not saturate |
-
-**AgriTwin Decision:** NDRE for satellites (no saturation, N-detection), GRVI for smartphones (no NIR sensor needed).
-
-## 📐 System Architecture
-
-### Modular Architecture Flow
+The mental model and data relationship hierarchy of AgriTwin is structured as follows:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                         MODULAR ARCHITECTURE                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                   3.1 Farm Management                        │   │
-│  │  Farm → Field → Season → Crop hierarchy with event updates   │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                3.2 Observation Layer                         │   │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────────┐  │   │
-│  │  │ Sentinel-2   │ │ Smartphone   │ │ Weather & Soil    │  │   │
-│  │  │ NDRE/LAI     │ │ GRVI (W-Shape)│ │ (ERA5-Land +     │  │   │
-│  │  │ (5-day)      │ │ (5 photos)   │ │  SoilGrids)       │  │   │
-│  │  └──────────────┘ └──────────────┘ └────────────────────┘  │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                  3.3 Data Fusion Module                      │   │
-│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌─────────┐ │   │
-│  │  │ Observation│ │ Temporal   │ │ Spatial    │ │Confidence│ │   │
-│  │  │ Validation │ │ Alignment  │ │ Alignment  │ │Estimation│ │   │
-│  │  └────────────┘ └────────────┘ └────────────┘ └─────────┘ │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │           Multi-source Fusion                          │ │   │
-│  │  │   (S2 + S1 SAR + GRVI, cloud-adaptive weighting)      │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │               3.5 Physics Simulation                         │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │   WOFOST Engine (PCSE) with E-WOFOST enhancements      │ │   │
-│  │  │   - 4-layer soil moisture (ERA5-Land)                  │ │   │
-│  │  │   - Hourly heat stress tracking                         │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              3.6 Data Assimilation (EnKF)                    │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │  Ensemble Manager (25 members) → Kalman Gain →        │ │   │
-│  │  │  State Update (LAI, SM, WLV, WST, WRT, WSO)          │ │   │
-│  │  │  30% "Gentle Nudge" for farmer photos                 │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              3.7 Bias Correction (XGBoost)                    │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │  75-year ERA5-Land back-cast → Residual Learning →    │ │   │
-│  │  │  Yield correction (TWSO)                              │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └───────────────────────────┬─────────────────────────────────┘   │
-│                              │                                      │
-│                              ▼                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                   3.4 Digital Twin Core                     │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │  Twin State Manager → Event Bus → Version Control      │ │   │
-│  │  │  WebSockets → UI Real-time Updates (Coming Soon)      │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+Farm (Physical grouping of fields)
+  ↓
+Field (Geospatial boundary GeoJSON, location & elevation)
+  ↓
+Observations Ingestion Layer
+(Ingests external satellite LAI/SM or soil sensors into the DB)
+  ↓
+Simulation Layer (WOFOST/PCSE Engine)
+(Daily timestep crop growth, water balance, and transpiration modeling)
+  ├─► SimulationRun (Open-loop execution memory & DailyOutputs)
+  └─► AssimilationRun (Closed-loop EnKF manager & execution diagnostics)
+        ↓
+    EnsembleManager (N parallel perturbed crop parameters & weather instances)
+        ↓
+    AssimilationService (Forecasts and executes the EnKF updates)
+        ↓
+    Filters (EnKF math updating state vectors: LAI, SM, WLV, WST, WSO, WRT)
+        ↓
+    StateUpdater (Injects corrected states back into the running PCSE engines)
+        ↓
+    AssimilationState (Persisted historical correction logs per cycle)
+  ↓
+REST APIs (FastAPI routes exposing simulation, scenario, and assimilation APIs)
 ```
 
 ---
 
-### 📂 Directory & Module Guide
+## 📂 Comprehensive Directory & Module Guide
 
-| **Directory** | **Module(s)** | **Purpose** |
-|---------------|---------------|-------------|
-| `api/routes/` | 3.2, 3.9 | Scout session endpoints (GRVI, W-Shape protocol). |
-| `assimilation/` | 3.6 | EnKF ensemble management, filter math, state vector, update logic. |
-| `data_sources/` | 3.12, 3.11 | ERA5-Land, NASA POWER, SoilGrids, sensor adapters. |
-| `models/` | 3.1 | Farm, Field, SimulationRun, DailyOutput (SQLAlchemy). |
-| `repositories/` | 3.1 | SQLAlchemy database access layer. |
-| `satellite/` | 3.10 | Sentinel-1/2 providers, vegetation indices, LAI estimators. |
-| `scenario/` | 3.13 | Sowing date, variety, irrigation sweep generators. |
-| `services/` | 3.3, 3.7 | Data fusion pipeline, temporal/spatial alignment, bias correction, window generator. |
-| `simulation/` | 3.5 | PCSE WOFOST execution engine, agromanagement, output parsing. |
-| `tests/` | All | 290 unit and integration tests. |
-| `alembic/` | 3.18 | Database schema migrations. |
-| `docs/` | N/A | Technical documentation (EnKF design, weather pipeline, etc.). |
+### 1. Geospatial & DB Core (`models/`, `repositories/`, `db/`)
+*   **`models/farm.py`**: Maps physical farms. Organizes multiple fields belonging to a single user.
+*   **`models/field.py`**: Represents field polygons (using boundary GeoJSON), centroids, area size (ha), and elevation (m). Deleting a field cascade-deletes all associated observations, simulations, and assimilation runs.
+*   **`models/simulation_run.py`**: Historical records of baseline, irrigated, or assimilated simulation campaigns. Stores request payload snapshots, aggregate agronomic metrics, and phenological summary dates.
+*   **`models/daily_output.py`**: High-frequency daily time series table storing standard WOFOST variables (`LAI`, `DVS`, `TAGP`, `TWSO`, `SM`, `RFTRA`, etc.) for every day of the simulation.
+*   **`repositories/`**: Fast SQLAlchemy database access layer for saving, retrieving, and paginating farms, fields, daily outputs, simulations, and assimilation states.
+
+### 2. External Adapters & Data Sources (`data_sources/`, `services/`)
+*   **`data_sources/nasa_power_source.py`**: Interacts with the NASA POWER API to query daily weather parameters (solar radiation, minimum/maximum temperature, precipitation, wind speed, vapor pressure) for any global coordinate. Saves raw queries to `.agritwin_cache/` to avoid hitting API rate limits.
+*   **`data_sources/soilgrids_source.py`**: Queries the ISRIC SoilGrids v2.0 API to fetch sand, clay, and silt percentages across multiple depth layers.
+*   **`services/soil_service.py`**: Maps SoilGrids texture classes to hydraulic parameters (wilting point `SMW`, field capacity `SMFCF`, saturation `SM0`, saturated conductivity `K0`, critical air content `CRAIRC`) using standard pedotransfer equations.
+*   **`services/weather_service.py`**: Packages raw cached weather containers and computes temperature/radiation indices (e.g. temperature averages during grain fill).
+*   **`data_sources/sensor_source.py`**: Standardized ingestion interface for local IoT soil moisture and temperature sensors.
+*   **`data_sources/satellite_source.py`**: Ingests processed satellite scenes from Sentinel-2 or MODIS.
+
+### 3. Satellite Processing Pipeline (`satellite/`)
+*   **`satellite/providers/sentinel2_provider.py`**: Queries or synthetically generates Sentinel-2 scenes for a given field boundary and date range. Automatically applies cloud-masking algorithms.
+*   **`satellite/processors/vegetation_indices.py`**: Computes NDVI (Normalized Difference Vegetation Index) and EVI (Enhanced Vegetation Index) from raw spectral bands.
+*   **`satellite/processors/lai_estimator.py`**: Converts vegetation index curves into Leaf Area Index (LAI) estimates.
+*   **`satellite/services/lai_observation_service.py`**: Runs the Sentinel-2 query, masks clouds, extracts LAI estimations, and ingests them into the database as field observations.
+*   **`satellite/api/routes.py`**: Exposes the `GET /satellite/lai` ingestion endpoint.
+
+### 4. WOFOST Simulation Engine (`simulation/`)
+*   **`simulation/engine.py`**: High-level execution class that integrates weather providers, crop parameter files, and soil properties to instantiate the PCSE WOFOST engine.
+*   **`simulation/agromanagement.py`**: Compiles crop sowing parameters and timed irrigation events. Corrects the rice transplanting exception (setting `crop_start_type="emergence"` if the transplanting development stage `DVSI` is greater than 0).
+*   **`simulation/crop_provider.py` & `soil_provider.py`**: Reads standard crop parameter files (retrieved from `external_repos/WOFOST_crop_parameters`) and generates custom soil parameters.
+*   **`simulation/output_parser.py`**: Converts raw arrays of PCSE dictionary outputs into agronomic summaries and phenological stages.
+
+### 5. Scenario Sweeper Engine (`scenario/`)
+*   **`scenario/generators/sowing_date_generator.py`**: Generates a set of sowing dates around a baseline (e.g., in weekly shifts) to find the optimal planting window.
+*   **`scenario/generators/variety_generator.py`**: Generates sweeps across available crop varieties (e.g., IR64 vs other rice variety parameters).
+*   **`scenario/generators/irrigation_generator.py`**: Generates deficit, timed, or critical-stage irrigation options.
+*   **`scenario/services/comparison_engine.py`**: Evaluates simulation outputs from all candidate strategies. Ranks them based on yield (`TWSO`) and Water Use Efficiency (WUE - kg of yield produced per mm of water applied).
+*   **`scenario/api/`**: Exposes scenario sweep endpoints (`POST /scenarios/sowing-date`, `POST /scenarios/irrigation`, etc.).
+
+### 6. Ensemble Kalman Filter Data Assimilation (`assimilation/`)
+*   **`assimilation/ensemble/ensemble_manager.py`**: Manages $N$ parallel WOFOST runs. Adds stochastic Gaussian noise to crop parameters (`SLATB`, `SPAN`, `TSUM1`, `TSUM2`) and soil moisture bounds (`SMFCF`, `SMW`). Uses `PerturbedWeatherProvider` to add daily noise to temperature, rainfall, and solar radiation.
+*   **`assimilation/state/state_vector.py`**: Defines the EnKF state vector layout. Houses physical variables: `LAI`, `SM` (soil moisture), `WLV` (leaves), `WST` (stems), `WRT` (roots), and `WSO` (storage organs). Converts dict variables to matrices and back.
+*   **`assimilation/filters/enkf.py`**: The EnKF mathematical core. Calculates the forecast ensemble covariance ($P^f$), the Kalman Gain ($K$), and updates the state variables of all ensemble members using the observation vector and observation noise covariance ($R$).
+*   **`assimilation/updater/state_updater.py`**: Corrects internal physical variables of active WOFOST engines (such as green leaf age class partitions and water balance routing) to match the EnKF updated state vector, preventing model crashes.
+*   **`assimilation/services/assimilation_service.py`**: Runs the sequential forecast-assimilation loop over a crop season. Performs Quality Control (QC) filters (Z-score outlier detection, minimum quality index thresholds, and source isolation) and persists `AssimilationState` logs.
+*   **`assimilation/services/assimilation_visualization_service.py`**: Compiles visual comparison assets:
+    *   *History*: Detailed audit trails of state changes (prior vs posterior) and innovation values.
+    *   *Timeseries*: Combines open-loop daily values, observations, and assimilated curves, using a Zero-Order Hold (ZOH) offset projection to predict the corrected development curve.
+    *   *Yield Evolution*: Compiles predicted yield (`TWSO`) convergence across successive assimilation steps.
+*   **`assimilation/api/assimilation_routes.py`**: Exposes the EnKF API endpoint routes (`POST /assimilation/run`, status checks, history, timeseries, and yield evolution).
 
 ---
 
-## ⚙️ Developer Quickstart
+## ⚙️ Running Locally
 
-### Installation & Setup
-
+### 1. Environment Setup
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/AgriTwin.git
-cd AgriTwin
+# Clone the repository and navigate to the directory
+cd /home/vini/Arena/AgriTwin
 
-# 2. Create virtual environment (using uv for 10-100x faster installs)
-uv venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+# Activate the virtual environment
+source venv/bin/activate
 
-# 3. Install dependencies
-uv sync
-```
-
-**Configuration (`.env`)**
-
-```env
-# Application
-APP_NAME=AgriTwin
-APP_ENV=development
-DEBUG=True
-API_V1_PREFIX=/api/v1
-
-# Database (SQLite for dev, PostgreSQL for production)
-DATABASE_URL=sqlite:///./agritwin.db
-
-# SentinelHub (for Sentinel-2 data)
-SENTINEL_HUB_CLIENT_ID=your_client_id
-SENTINEL_HUB_CLIENT_SECRET=your_client_secret
-
-# ECMWF CDS API (for ERA5-Land)
-CDS_API_KEY=your_api_key
-CDS_API_URL=https://cds.climate.copernicus.eu/api
-```
-
-### Running the API Server
-
-```bash
-# 1. Apply database migrations
+# Apply database migrations
 alembic upgrade head
-
-# 2. Start the FastAPI server
-uv run uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Interactive API docs: http://localhost:8000/docs
-
-### Testing & Demo
-
+### 2. Start the FastAPI API Server
+The server runs with reload enabled on port 8000:
 ```bash
-# Run all 290 tests
-pytest
+python -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+Interactive docs are then available at: [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI).
 
-# Run the automated EnKF assimilation demo
+### 3. Run the Verification Tests
+To run all 290 unit and integration tests:
+```bash
+pytest
+```
+
+---
+
+## 🎓 Demonstrating EnKF Assimilation (Demo Script)
+
+We have provided a fully automated demonstration script `run_demo.py` that sets up a full rice crop campaign, ingests synthetic satellite observations, runs an open-loop simulation, and then performs a closed-loop EnKF assimilation (25 members) to show yield convergence.
+
+Run the demonstration script:
+```bash
 python3 run_demo.py
 ```
 
-**Expected Demo Output:**
-
-- Open-loop yield: **7271.7 kg/ha**
-- EnKF-corrected yield: **5774.36 kg/ha**
-- Yield convergence shown across 25 ensemble members.
-
----
-
-
-### ⚠️ Critical Constraints
-
-| **Constraint** | **Detail** |
-|---------------|-----------|
-| **Image Upload Limit** | 30 MB total (5 images). Compressed to 1280×1280 at 75% quality. |
-| **ERA5-Land Delay** | 2–3 month publication delay. NASA POWER kept as real-time fallback. |
-| **IoT Sensors** | ❌ Explicitly Rejected (costly for smallholders, maintenance). |
-| **Drones** | ❌ Explicitly Rejected (costly, licensing, maintenance). |
-| **DSSAT/AquaCrop** | ❌ Rejected (MCMC calibration, 40+ genetic coefficients, 0% adoption). |
-| **GRVI→LAI Formula** | `LAI = 0.5 + (GRVI × 3.0)` is a linear approximation. Needs field validation. |
-| **XGBoost Model Drift** | Trained on 75 years of ERA5 data. Schedule **yearly retraining**. |
-| **SentinelHub Quota** | Free tier has API limits. Cache usage is critical. |
+### Script Execution Steps:
+1. **Step 1 & 2**: Registers a demo farm and field (Rice IR64, Lucknow, India) and ingests 20 valid Sentinel-2 observations over the season.
+2. **Step 3**: Executes the baseline open-loop simulation (yield: **7271.7 kg/ha**).
+3. **Step 4**: Triggers the closed-loop EnKF assimilation loop.
+4. **Step 5 & 6**: Displays status details and step-by-step cycle history containing prior state, posterior state, innovation, and quality score.
+5. **Step 7 & 8**: Prints the convergence of predicted yield (`TWSO`) per cycle (converging to **5774.36 kg/ha**) and outputs a comparison time series of open-loop vs. EnKF vs. observations.
 
 ---
 
-## 📡 API Reference
+## 📡 API Reference Quickstart
 
-### 1. Submit Smartphone Scout Session (5 Photos)
-
-```bash
-curl -X POST http://localhost:8000/fields/YOUR_FIELD_UUID/scout-session \
-     -F "images=@photo1.jpg" \
-     -F "images=@photo2.jpg" \
-     -F "images=@photo3.jpg" \
-     -F "images=@photo4.jpg" \
-     -F "images=@photo5.jpg" \
-     -F "session_notes=W-shape walk, clear sky"
-```
-
-**Response:**
-```json
-{
-  "session_id": "uuid",
-  "field_id": "uuid",
-  "timestamp": "2020-07-15T11:30:00Z",
-  "processing_status": "completed",
-  "results": {
-    "median_grvi": 0.42,
-    "estimated_lai": 1.76,
-    "observation_error": 0.53,
-    "confidence": 0.70,
-    "quality_score": 0.85
-  }
-}
-```
-
-**See:** `docs/w_shape_grvi_protocol.md` for complete W-Shape protocol specification.
-
----
-
+### 1. Run Baseline Crop Simulation
 ```bash
 curl -X POST http://localhost:8000/simulate \
      -H 'Content-Type: application/json' \
@@ -324,30 +164,87 @@ curl -X POST http://localhost:8000/simulate \
      }'
 ```
 
-### 3. Trigger EnKF Assimilation
-
+### 2. Trigger EnKF Assimilation Run
 ```bash
 curl -X POST http://localhost:8000/assimilation/run \
      -H 'Content-Type: application/json' \
      -d '{
-       "simulation_id": "YOUR_SIMULATION_UUID",
+       "simulation_id": "YOUR_BASELINE_SIMULATION_UUID",
        "field_id": "YOUR_FIELD_UUID",
        "ensemble_size": 25
      }'
 ```
 
-### 4. Fetch Assimilation History & Yield Evolution
+### 3. Fetch Assimilation Cycle History
+Returns the chronological audit trail of update dates, priors, posteriors, innovations, and quality metrics:
+```bash
+curl -X GET http://localhost:8000/assimilation/YOUR_BASELINE_SIMULATION_UUID/history
+```
+
+### 4. Fetch Timeseries Comparison
+Retrieves daily comparison data points mapping open-loop state, EnKF-assimilated state, and satellite observations:
+```bash
+curl -X GET http://localhost:8000/assimilation/YOUR_BASELINE_SIMULATION_UUID/timeseries
+```---
+
+## 🚀 Recent Updates: Multi-Source Data Fusion Implementation
+
+### What's New (Latest PR)
+
+This release implements **Module 3.2 (Observation Layer)** and **Module 3.3 (Data Fusion Pipeline)** - the complete observation infrastructure that feeds EnKF data assimilation.
+
+#### Three Data Sources Integrated
+
+1. **Sentinel-2 NDRE Fetcher** (`satellite/`)
+   - Automated 10m resolution LAI observations every 5 days
+   - Cloud-adaptive confidence scoring (0.85 → 0.0 based on SCL)
+   - Beer-Lambert LAI conversion with crop-specific k coefficients
+   - Cost: €0.006 per field/year
+
+2. **W-Shape GRVI Protocol** (`api/routes/scout_sessions.py`)
+   - 5-photo smartphone sampling pattern
+   - GPS EXIF extraction and spatial alignment
+   - 30% observation error ("Gentle Nudge" for EnKF)
+   - Replaces ₹40,000 SPAD meters with ₹0 RGB cameras
+
+3. **ERA5-Land Integration** (`data_sources/era5_land_*.py`)
+   - 4-layer soil moisture (0-7, 7-28, 28-100, 100-289 cm)
+   - Hybrid routing: ERA5-Land (>60 days) + NASA POWER (<60 days)
+   - Hourly resolution for heat stress tracking
+   - 75-year historical coverage (1950+)
+
+#### New API Endpoints
 
 ```bash
-# History audit trail (priors, posteriors, innovations)
-curl -X GET http://localhost:8000/assimilation/YOUR_SIMULATION_UUID/history
+# Fetch satellite LAI observations
+GET /satellite/lai?field_id=uuid&start_date=2020-06-01&end_date=2020-11-30
 
-# Yield convergence across ensemble cycles
-curl -X GET http://localhost:8000/assimilation/YOUR_SIMULATION_UUID/yield-evolution
+# Submit farmer scout session (5 photos)
+POST /fields/{field_id}/scout-session
 
-# Daily timeseries: Open-Loop vs EnKF vs Observations
-curl -X GET http://localhost:8000/assimilation/YOUR_SIMULATION_UUID/timeseries
+# List scout sessions
+GET /fields/{field_id}/scout-sessions
 ```
+
+#### Monsoon Resilience Strategy
+
+| **Cloud Cover** | **Satellite Confidence** | **Action** | **Fallback** |
+|----------------|-------------------------|-----------|--------------|
+| 0-30% | 0.85 | ✅ Normal | N/A |
+| 30-70% | Reduced | ⚠️ Partial | Farmer GRVI |
+| 70-100% | 0.0 | ❌ HOLD_OPEN_LOOP | ERA5-Land SM |
+
+**Result:** 82% temporal coverage even during monsoon season.
+
+#### Key Metrics
+
+| **Source** | **R² vs Ground Truth** | **Resolution** | **Cost** |
+|-----------|----------------------|----------------|----------|
+| Sentinel-2 NDRE | 0.87 | 10m, 5-day | €0.006/field/year |
+| Smartphone GRVI | >0.85 | Point, on-demand | ₹0 |
+| ERA5-Land SM | 0.85-0.90 | 11km, hourly | Free |
+
+**See individual docs for complete technical specifications.**
 
 ---
 
