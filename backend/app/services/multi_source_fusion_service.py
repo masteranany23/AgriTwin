@@ -21,6 +21,7 @@ from uuid import UUID
 from backend.app.api.schemas.fusion import (
     FusionRequest,
     FusionResponse,
+    ConfidenceRequest,
     ObservationSource
 )
 from backend.app.services.confidence_estimator import ConfidenceEstimator
@@ -119,10 +120,11 @@ class MultiSourceFusionService:
         if total_weight > 0:
             weights = {k: v / total_weight for k, v in weights.items()}
         
-        # --- Step 3: Compute weighted LAI ---
+        # --- Step 3: Compute weighted LAI using inverse-variance uncertainty ---
         fused_lai = 0.0
         contributing_sources = []
         source_weights = {}
+        source_confidences = {}
         
         for source, weight in weights.items():
             if weight <= 0:
@@ -133,6 +135,9 @@ class MultiSourceFusionService:
                 continue
             
             raw_value = obs.get("value")
+            if raw_value is None:
+                continue
+
             source_enum = ObservationSource(source)
             
             # Convert to LAI if necessary
@@ -145,7 +150,19 @@ class MultiSourceFusionService:
             else:
                 lai_value = raw_value
             
-            # Apply confidence weighting
+            # --- Extract Observation Uncertainty R = variance = std_dev^2 ---
+            # Check for explicit uncertainty metrics in observation item
+            r_val = None
+            if "variance" in obs and obs["variance"] is not None and float(obs["variance"]) > 0:
+                r_val = float(obs["variance"])
+            elif "observation_error_r" in obs and obs["observation_error_r"] is not None and float(obs["observation_error_r"]) > 0:
+                r_val = float(obs["observation_error_r"])
+            elif "uncertainty" in obs and obs["uncertainty"] is not None and float(obs["uncertainty"]) > 0:
+                r_val = float(obs["uncertainty"]) ** 2
+            elif "std_dev" in obs and obs["std_dev"] is not None and float(obs["std_dev"]) > 0:
+                r_val = float(obs["std_dev"]) ** 2
+
+            # Compute confidence score and fallback R
             conf_req = ConfidenceRequest(
                 source=source_enum,
                 value=lai_value,
@@ -155,17 +172,27 @@ class MultiSourceFusionService:
                 days_since_observation=obs.get("days_since", 0)
             )
             conf_resp = self.confidence_estimator.compute_confidence(conf_req)
-            
-            # Effective weight = source_weight * confidence
-            effective_weight = weight * conf_resp.confidence_score
+
+            # If no explicit uncertainty field provided, use confidence-derived error variance R
+            if r_val is None:
+                r_val = float(conf_resp.observation_error_r)
+
+            # Safeguard lower bound on R to prevent division by zero
+            r_val = max(1e-6, r_val)
+
+            # Inverse-variance weighting modulated by cloud-cover source eligibility prior
+            # w_i \propto base_weight / R_i
+            effective_weight = weight / r_val
             fused_lai += effective_weight * lai_value
             source_weights[source] = effective_weight
+            source_confidences[source] = conf_resp.confidence_score
             contributing_sources.append(source)
         
-        # --- Step 4: Normalize final fused value ---
+        # --- Step 4: Normalize final fused value and weights ---
         total_eff_weight = sum(source_weights.values())
         if total_eff_weight > 0:
             fused_lai = fused_lai / total_eff_weight
+            normalized_weights = {k: v / total_eff_weight for k, v in source_weights.items()}
         else:
             # If no valid observations, fallback to no data
             return FusionResponse(
@@ -180,9 +207,10 @@ class MultiSourceFusionService:
             )
         
         # --- Step 5: Compute overall confidence of the fused product ---
-        # Weighted average of confidences
-        avg_confidence = np.mean([source_weights.get(s, 0) for s in source_weights.keys()])
-        fused_confidence = min(0.95, avg_confidence)
+        weighted_confidence = sum(
+            normalized_weights[s] * source_confidences[s] for s in contributing_sources
+        )
+        fused_confidence = min(0.95, max(0.10, weighted_confidence))
         
         # Clamp LAI to physical bounds
         fused_lai = max(0.0, min(8.0, fused_lai))
@@ -192,8 +220,8 @@ class MultiSourceFusionService:
             date=request.date,
             fused_lai=round(fused_lai, 3),
             fused_confidence=round(fused_confidence, 3),
-            source_weights={k: round(v, 3) for k, v in source_weights.items()},
+            source_weights={k: round(v, 3) for k, v in normalized_weights.items()},
             contributing_sources=contributing_sources,
             quality_flag=quality_flag,
-            message=f"Fused LAI using {len(contributing_sources)} sources. Primary: {primary_source}"
+            message=f"Fused LAI using {len(contributing_sources)} sources with uncertainty weighting. Primary: {primary_source}"
         )

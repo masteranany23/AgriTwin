@@ -134,9 +134,14 @@ def run_simulation(
     if harvest_date is None:
         harvest_date = dt.date(2021, 7, 30)
 
+    # Canonical campaign window: start = sowing_date - 14 days, end = harvest_date
+    campaign_start = sow_date - dt.timedelta(days=14)
+    campaign_end = harvest_date
+
     logger.info(
-        "Starting simulation: %s/%s at (%.2f, %.2f), %s to %s",
+        "Starting simulation: %s/%s at (%.2f, %.2f), sow=%s, harvest=%s, campaign=%s..%s",
         crop_name, variety_name, latitude, longitude, sow_date, harvest_date,
+        campaign_start, campaign_end,
     )
 
     # ── 1. Weather ───────────────────────────────────────────────────────
@@ -144,9 +149,11 @@ def run_simulation(
         latitude=latitude,
         longitude=longitude,
         elevation=elevation,
-        start_year=sow_date.year,
-        end_year=harvest_date.year,
+        start_year=campaign_start.year,
+        end_year=campaign_end.year,
         use_nasa=use_nasa_weather,
+        start_date=campaign_start,
+        end_date=campaign_end,
     )
     logger.info("Weather: %s to %s", wdp.first_date, wdp.last_date)
 
@@ -187,6 +194,7 @@ def run_simulation(
         variety_name=variety_name,
         sow_date=sow_date,
         harvest_date=harvest_date,
+        campaign_start_date=campaign_start,
         max_duration=max_duration,
         irrigation_events=irrigation_events,
         crop_start_type=crop_start_type,

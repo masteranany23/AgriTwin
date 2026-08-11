@@ -56,6 +56,8 @@ class SyntheticWeatherProvider(WeatherDataProvider):
         elevation: float = 10.0,
         start_year: int = 2020,
         end_year: int = 2021,
+        start_date: Optional[dt.date] = None,
+        end_date: Optional[dt.date] = None,
     ) -> None:
         # Verified: base/weather.py line 228 — initializes self.store = {}
         WeatherDataProvider.__init__(self)
@@ -72,8 +74,10 @@ class SyntheticWeatherProvider(WeatherDataProvider):
         self.angstB = 0.49
 
         # Generate daily records for the full period
-        start_date = dt.date(start_year, 1, 1)
-        end_date = dt.date(end_year, 12, 31)
+        if start_date is None:
+            start_date = dt.date(start_year, 1, 1)
+        if end_date is None:
+            end_date = dt.date(end_year, 12, 31)
         n_days = (end_date - start_date).days + 1
 
         logger.info(
@@ -192,12 +196,17 @@ def create_weather_provider(
         start_year:  First year of weather data (synthetic mode only)
         end_year:    Last year of weather data (synthetic mode only)
         use_nasa:    If True, use WeatherService (NASA POWER with caching)
-        start_date:  Start date for NASA weather fetch (required if use_nasa=True)
-        end_date:    End date for NASA weather fetch (required if use_nasa=True)
+        start_date:  Start date for weather data (defaults to start_year-01-01)
+        end_date:    End date for weather data (defaults to end_year-12-31)
 
     Returns:
         WeatherDataProvider instance ready for PCSE Engine
     """
+    if start_date is not None:
+        start_year = start_date.year
+    if end_date is not None:
+        end_year = end_date.year
+
     if use_nasa:
         # Use our custom WeatherService with bounded dates and JSON caching
         from backend.app.services.weather_service import WeatherService
@@ -215,5 +224,7 @@ def create_weather_provider(
             elevation=elevation,
             start_year=start_year,
             end_year=end_year,
+            start_date=start_date,
+            end_date=end_date,
         )
 

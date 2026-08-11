@@ -8,10 +8,14 @@ from backend.app.assimilation.updater.state_updater import (  # noqa: F401
     INJECTABLE_VARIABLES,
     PCSE_KEY_MAP,
 )
+from backend.app.assimilation.updater.physical_validator import (  # noqa: F401
+    validate_physical_feasibility,
+)
 
 __all__ = [
     "StateUpdater",
     "InjectionResult",
     "INJECTABLE_VARIABLES",
     "PCSE_KEY_MAP",
+    "validate_physical_feasibility",
 ]

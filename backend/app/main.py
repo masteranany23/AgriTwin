@@ -83,6 +83,7 @@ from backend.app.assimilation.api.observation_routes import router as observatio
 from backend.app.assimilation.api.assimilation_routes import router as assimilation_router
 from backend.app.satellite.api.routes import router as satellite_router
 from backend.app.api.routes.fusion import router as fusion_router
+from backend.app.api.routes.benchmark_routes import router as benchmark_router
 from backend.app.db.session import create_tables
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -168,14 +169,17 @@ app = FastAPI(
 # In production with PostgreSQL, replace this with Alembic migrations.
 @app.on_event("startup")
 def on_startup() -> None:
-    """Initialise the database schema on server start.
+    """Initialise the database schema on server start when configured.
 
-    Uses Base.metadata.create_all() with CREATE TABLE IF NOT EXISTS semantics.
-    For SQLite: creates agritwin.db and all 4 tables on first boot.
-    For PostgreSQL: only creates tables that don't already exist.
+    In production, database migrations are managed exclusively by Alembic.
+    Automatic table creation is enabled only in development/testing environments
+    when AUTO_CREATE_TABLES is enabled.
     """
-    create_tables()
-    logger.info("Database tables verified / created.")
+    if settings.AUTO_CREATE_TABLES:
+        create_tables()
+        logger.info("Database tables verified / created.")
+    else:
+        logger.info("Skipping automatic table creation; relying on Alembic migrations.")
 
 
 # ── CORS middleware ───────────────────────────────────────────────────────────
@@ -244,6 +248,12 @@ app.include_router(
     fusion_router,
     prefix="/fusion",
     tags=["Data Fusion (Module 3.3)"],
+)
+
+app.include_router(
+    benchmark_router,
+    prefix="/benchmark",
+    tags=["Benchmarking"],
 )
 
 

@@ -115,6 +115,8 @@ class NasaPowerWeatherSource(WeatherSource):
                 elevation=elevation,
                 start_year=start_date.year,
                 end_year=end_date.year,
+                start_date=start_date,
+                end_date=end_date,
             )
 
     def get_source_name(self) -> str:

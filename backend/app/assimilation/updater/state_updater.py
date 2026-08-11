@@ -65,6 +65,8 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from pcse.models import Wofost72_WLP_FD
 
+from backend.app.assimilation.updater.physical_validator import validate_physical_feasibility
+
 logger = logging.getLogger(__name__)
 
 
@@ -111,18 +113,20 @@ class InjectionResult:
     """Record of what StateUpdater.inject() did for one ensemble member.
 
     Attributes:
-        date:           The assimilation date at which injection occurred.
-        injected:       Dict of variable_name → injected value (after clamping).
-        skipped_none:   Variables that were None in the StateVector (no injection needed).
-        skipped_nan:    Variables where the analysis value was NaN (EnKF produced
-                        no update for this variable — forecast retained).
-        clamped:        Variables whose values were clamped to physical bounds.
-                        Format: {variable: (original_value, clamped_value)}.
-        errors:         Variables for which set_variable() raised an exception.
-                        These are silently skipped — the PCSE engine retains its
-                        internal value for the affected variable.
-        read_back:      get_variable() values read back after injection (verification).
-                        None entries mean PCSE did not expose the variable for reading.
+        date:                The assimilation date at which injection occurred.
+        injected:            Dict of variable_name → injected value (after clamping).
+        skipped_none:        Variables that were None in the StateVector (no injection needed).
+        skipped_nan:         Variables where the analysis value was NaN (EnKF produced
+                             no update for this variable — forecast retained).
+        clamped:             Variables whose values were clamped to physical bounds.
+                             Format: {variable: (original_value, clamped_value)}.
+        errors:              Variables for which set_variable() raised an exception.
+                             These are silently skipped — the PCSE engine retains its
+                             internal value for the affected variable.
+        read_back:           get_variable() values read back after injection (verification).
+                             None entries mean PCSE did not expose the variable for reading.
+        validation_errors:   List of physical validation violation descriptions.
+        is_physically_valid: True if the posterior state passed all physical-feasibility rules.
     """
     date: Optional[datetime.date] = field(default=None)
     injected:     dict[str, float]              = field(default_factory=dict)
@@ -131,6 +135,8 @@ class InjectionResult:
     clamped:      dict[str, tuple[float, float]] = field(default_factory=dict)
     errors:       dict[str, str]                = field(default_factory=dict)
     read_back:    dict[str, Optional[float]]    = field(default_factory=dict)
+    validation_errors: list[str]                = field(default_factory=list)
+    is_physically_valid: bool                   = True
 
     @property
     def success(self) -> bool:
@@ -234,6 +240,16 @@ class StateUpdater:
         result = InjectionResult(
             date=getattr(state, "date", None)
         )
+
+        # ── Step 0: Validate physical feasibility ──────────────────────
+        is_valid, val_errors = validate_physical_feasibility(state, wofost=wofost)
+        result.is_physically_valid = is_valid
+        result.validation_errors = val_errors
+        if not is_valid:
+            logger.warning(
+                "StateUpdater: Posterior state failed physical validation: %s",
+                "; ".join(val_errors),
+            )
 
         # Determine which variables to attempt
         target_map = {

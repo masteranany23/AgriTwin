@@ -128,6 +128,7 @@ class EnsembleManager:
             variety_name=variety_name,
             sow_date=sow_date,
             harvest_date=harvest_date,
+            campaign_start_date=campaign_start,
             max_duration=max_duration,
             irrigation_events=irrigation_events,
             crop_start_type=crop_start_type,
@@ -159,10 +160,15 @@ class EnsembleManager:
             tsum1 = max(100.0, random.gauss(base_tsum1, base_tsum1 * 0.1))
             tsum2 = max(100.0, random.gauss(base_tsum2, base_tsum2 * 0.1))
             
-            # Soil parameters: preserve physical constraints (SMW < SMFCF < SM0)
-            smw = max(0.01, random.gauss(base_smw, base_smw * 0.1))
-            smfcf = max(smw + 0.02, random.gauss(base_smfcf, base_smfcf * 0.1))
-            smfcf = min(smfcf, base_sm0 - 0.02)
+            # Soil parameters: strictly preserve physical constraints (SMW < SMFCF < SM0)
+            margin = min(0.02, (base_sm0 - 0.01) / 3.0)
+            margin = max(0.001, margin)
+
+            smw_raw = random.gauss(base_smw, base_smw * 0.1)
+            smw = max(0.01, min(smw_raw, base_sm0 - 2 * margin))
+
+            smfcf_raw = random.gauss(base_smfcf, base_smfcf * 0.1)
+            smfcf = max(smw + margin, min(smfcf_raw, base_sm0 - margin))
             
             my_cropd = dict(self.cropd)
             my_cropd.update({

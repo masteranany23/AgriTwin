@@ -33,6 +33,7 @@ from backend.app.assimilation.schemas.assimilation_visualization import (
     TimeSeriesResponse,
     YieldEvolutionPoint,
 )
+from backend.app.benchmarking.schemas import RunDiagnosticsSummary
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -294,4 +295,20 @@ def get_yield_evolution(
 
     service = AssimilationVisualizationService(db)
     return service.get_yield_evolution(simulation_id)
+
+
+@router.get(
+    "/{simulation_id}/diagnostics",
+    response_model=RunDiagnosticsSummary,
+    summary="Get compact EnKF diagnostics for an assimilation run",
+    description="Returns compact EnKF diagnostics (innovation, ensemble spread, valid/rejected counts, state update magnitude).",
+    tags=["Assimilation"],
+)
+def get_assimilation_diagnostics(
+    simulation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> RunDiagnosticsSummary:
+    from backend.app.api.routes.benchmark_routes import get_enkf_diagnostics
+    return get_enkf_diagnostics(simulation_id, db)
+
 

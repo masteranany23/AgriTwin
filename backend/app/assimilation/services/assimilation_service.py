@@ -38,6 +38,7 @@ import numpy as np
 from backend.app.assimilation.ensemble.ensemble_manager import EnsembleManager
 from backend.app.assimilation.filters.enkf import enkf_update
 from backend.app.assimilation.forecast.forecast_step import forecast_until
+from backend.app.assimilation.operators.observation_operator import DirectObservationOperator
 from backend.app.assimilation.models.assimilation_state import AssimilationState
 from backend.app.assimilation.models.observation import Observation, ObservationSource, ObservationStatus
 from backend.app.assimilation.repositories.assimilation_state_repository import AssimilationStateRepository
@@ -361,8 +362,10 @@ class AssimilationService:
                 skip_reason="No QC-passed obs mapped to a known StateVector variable",
             )
 
-        # ── 5. EnKF update ────────────────────────────────────────────────
-        X_a, d, K = enkf_update(X_f, y, R)
+        # ── 5. EnKF update with explicit observation operator ───────────────
+        obs_idx = np.where(np.isfinite(y))[0]
+        obs_operator = DirectObservationOperator(obs_idx, state_dim=STATE_DIM)
+        X_a, d, K = enkf_update(X_f, y, R, H_operator=obs_operator)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             x_mean_a = np.nanmean(X_a, axis=1)

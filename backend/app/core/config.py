@@ -112,6 +112,22 @@ class Settings:
     # Standard recommendation: 20–100 members. More = more accurate but slower.
     # ENKF_ENSEMBLE_SIZE: int = int(os.getenv("ENKF_ENSEMBLE_SIZE", "50"))
 
+    @property
+    def ENVIRONMENT(self) -> str:
+        return os.getenv("ENVIRONMENT", "development")
+
+    @property
+    def AUTO_CREATE_TABLES(self) -> bool:
+        """Determines whether database tables should be auto-created on startup.
+
+        In production, Alembic handles migrations. In dev/test, set AUTO_CREATE_TABLES=true.
+        """
+        env_val = os.getenv("AUTO_CREATE_TABLES")
+        if env_val is not None:
+            return env_val.lower() in ("true", "1", "yes")
+        # Default to False in production, True in development/test
+        return self.ENVIRONMENT.lower() in ("development", "dev", "test", "testing")
+
     # ── CORS origins ──────────────────────────────────────────────────────
     # Restrict in production to known frontend origins.
     # e.g. ["https://agritwin.example.com", "http://localhost:3000"]
@@ -120,3 +136,4 @@ class Settings:
 
 # Singleton settings instance — import this everywhere
 settings = Settings()
+
