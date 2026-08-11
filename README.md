@@ -51,47 +51,51 @@ AgriTwin is an advanced research and production-grade software platform engineer
 ```mermaid
 flowchart TD
     subgraph Data_Sources ["1. Multi-Source Ingestion Layer"]
-        NP[NASA POWER API]
-        E5[ERA5-Land Weather & 4-Layer SM]
-        SG[ISRIC SoilGrids v2.0]
-        S2[Sentinel-2 NDRE Fetcher - 10m]
-        GRVI[Smartphone W-Shape GRVI Scouting]
-        IOT[IoT Soil Moisture Sensors]
+        NP["NASA POWER API"]
+        E5["ERA5-Land Weather & 4-Layer SM"]
+        SG["ISRIC SoilGrids v2.0"]
+        S2["Sentinel-2 NDRE Fetcher - 10m"]
+        GRVI["Smartphone W-Shape GRVI Scouting"]
+        IOT["IoT Soil Moisture Sensors"]
     end
 
     subgraph Data_Fusion ["2. Module 3.3 Data Fusion Pipeline"]
-        TI[Temporal Interpolation & Monsoon Gap Detection]
-        SA[Spatial Alignment to Field Polygon]
-        CE[Confidence Estimator & Noise Matrix R]
-        MF[Multi-Source Bayesian Fusion]
+        TI["Temporal Interpolation & Monsoon Gap Detection"]
+        SA["Spatial Alignment to Field Polygon"]
+        CE["Confidence Estimator & Noise Matrix R"]
+        MF["Multi-Source Bayesian Fusion"]
         TI --> SA --> CE --> MF
     end
 
     subgraph Simulation_Engine ["3. Process-Based Crop Engine (WOFOST 7.2)"]
-        SE[PCSE Core Runner]
-        SE --> DO[Daily Outputs: DVS, LAI, TAGP, TWSO, SM]
+        SE["PCSE Core Runner"]
+        SE --> DO["Daily Outputs: DVS, LAI, TAGP, TWSO, SM"]
     end
 
     subgraph EnKF_Assimilation ["4. Closed-Loop EnKF Assimilation"]
-        EM[Ensemble Manager - N Perturbed Members]
-        KF[EnKF Core Filter Math]
-        SU[State Updater - PCSE Parameter Inserter]
-        AS[Persisted Assimilation States & Logs]
+        EM["Ensemble Manager - N Perturbed Members"]
+        KF["EnKF Core Filter Math"]
+        SU["State Updater - PCSE Parameter Inserter"]
+        AS["Persisted Assimilation States & Logs"]
         EM --> KF --> SU --> AS
-        SU -. Corrects State Vector .-> SE
+        SU -. "Corrects State Vector" .-> SE
     end
 
     subgraph API_Layer ["5. FastAPI Interface & REST Endpoints"]
-        R_SIM[/simulate & /simulations]
-        R_FLD[/fields & /scout-session]
-        R_SAT[/satellite/lai]
-        R_FUS[/fusion/pipeline]
-        R_ASM[/assimilation/run]
-        R_SCN[/scenarios]
+        R_SIM["/simulate & /simulations"]
+        R_FLD["/fields & /scout-session"]
+        R_SAT["/satellite/lai"]
+        R_FUS["/fusion/pipeline"]
+        R_ASM["/assimilation/run"]
+        R_SCN["/scenarios"]
     end
 
-    NP & E5 & SG --> SE
-    S2 & GRVI & IOT --> TI
+    NP --> SE
+    E5 --> SE
+    SG --> SE
+    S2 --> TI
+    GRVI --> TI
+    IOT --> TI
     MF --> KF
     DO --> R_SIM
     AS --> R_ASM
