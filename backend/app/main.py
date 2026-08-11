@@ -18,6 +18,13 @@ API documentation (auto-generated):
     http://localhost:8000/docs     — Swagger UI (interactive)
     http://localhost:8000/redoc   — ReDoc (clean reference)
 
+Documentation Files:
+    docs/w_shape_grvi_protocol.md     — W-Shape GRVI Protocol (Smartphone LAI)
+    docs/satellite_ndre_fetcher.md    — Sentinel-2 NDRE Automated Fetching
+    docs/era5_land_integration.md     — ERA5-Land Weather & 4-Layer Soil Moisture
+    docs/enkf_design.md               — Ensemble Kalman Filter Design
+    docs/state_variables.md           — WOFOST State Variables Reference
+
 Backend module structure:
     backend/app/
     ├── main.py                  ← You are here (app factory + router mounting)
@@ -26,27 +33,39 @@ Backend module structure:
     │   └── exceptions.py        ← Custom exception hierarchy
     ├── api/
     │   ├── routes/
-    │   │   └── simulate.py      ← POST /simulate, GET /simulate/crops
+    │   │   ├── simulate.py      ← POST /simulate, GET /simulate/crops
+    │   │   ├── simulations.py   ← GET /simulations, GET /simulations/{id}
+    │   │   ├── fields.py        ← Field CRUD endpoints
+    │   │   ├── scout_sessions.py ← W-Shape GRVI protocol (5 photos → LAI)
+    │   │   ├── fusion.py        ← Data fusion pipeline (Module 3.3)
+    │   │   └── interpolation.py ← Temporal interpolation
     │   └── schemas/
     │       └── simulate.py      ← Pydantic request/response models
     ├── services/
     │   ├── simulation_service.py ← Orchestrates WOFOST run
-    │   ├── weather_service.py   ← NASA POWER API + caching
+    │   ├── weather_service.py   ← Hybrid router (ERA5-Land + NASA POWER)
     │   └── soil_service.py      ← SoilGrids API + caching
-    └── simulation/
-        ├── engine.py            ← Core WOFOST run_simulation() function
-        ├── agromanagement.py    ← AgroManagement YAML builder
-        ├── crop_provider.py     ← YAMLCropDataProvider wrapper
-        ├── soil_provider.py     ← Soil parameter dict builder
-        ├── site_provider.py     ← WOFOST72SiteDataProvider wrapper
-        ├── weather_provider.py  ← Synthetic + NASA POWER providers
-        └── output_parser.py     ← PCSE output → normalized dicts
+    ├── simulation/
+    │   └── engine.py            ← Core WOFOST run_simulation() function
+    ├── assimilation/
+    │   ├── filters/enkf.py      ← Ensemble Kalman Filter implementation
+    │   └── api/                 ← Assimilation endpoints
+    ├── satellite/
+    │   ├── providers/           ← Sentinel-2, Sentinel-1 providers
+    │   └── api/routes.py        ← Satellite LAI fetch endpoints
+    └── scenario/
+        └── api/                 ← Scenario sweep endpoints
 
-Future routers to mount here (from docs/project_architecture.md Section 10):
-    - assimilate.router  → /assimilate    (EnKF data assimilation, Phase 3)
-    - observations.router → /observations (field/satellite observations, Phase 4)
-    - whatif.router      → /whatif        (scenario branching, Phase 3)
-    - farms.router       → /farms         (farm CRUD, needs PostgreSQL, Phase 2)
+Currently mounted routers:
+    - simulate.router         → /simulate           (WOFOST simulation)
+    - simulations_router      → /simulations        (Simulation history)
+    - fields_router          → /fields              (Field CRUD)
+    - scout_sessions_router  → /fields/{id}/scout-session  (W-Shape GRVI)
+    - scenario_router        → /scenarios           (Sowing date sweeps)
+    - observations_router    → /observations        (Field observations)
+    - satellite_router       → /satellite           (Sentinel-2 NDRE fetch)
+    - assimilation_router    → /assimilation        (EnKF data assimilation)
+    - fusion_router          → /fusion              (Data fusion pipeline)
 """
 
 import logging
@@ -58,6 +77,7 @@ from backend.app.core.config import settings
 from backend.app.api.routes import simulate
 from backend.app.api.routes.simulations import router as simulations_router
 from backend.app.api.routes.fields import router as fields_router
+from backend.app.api.routes.scout_sessions import router as scout_sessions_router
 from backend.app.scenario.api.scenario_routes import router as scenario_router
 from backend.app.assimilation.api.observation_routes import router as observations_router
 from backend.app.assimilation.api.assimilation_routes import router as assimilation_router
@@ -106,6 +126,16 @@ app = FastAPI(
             "description": (
                 "CRUD for Field records — GPS-located agricultural plots. "
                 "Fields group simulation runs by physical location."
+            ),
+        },
+        {
+            "name": "Scout Sessions",
+            "description": (
+                "W-Shape GRVI Protocol — Farmer smartphone-based LAI monitoring. "
+                "Upload 5 photos in W-shape pattern across field. Backend computes "
+                "median GRVI (Green-Red Vegetation Index) and converts to LAI estimate. "
+                "30% observation error ('Gentle Nudge') for EnKF assimilation. "
+                "See docs/w_shape_grvi_protocol.md for full protocol."
             ),
         },
         {
@@ -183,6 +213,11 @@ app.include_router(
     fields_router,
     prefix="/fields",
     tags=["Fields"],
+)
+app.include_router(
+    scout_sessions_router,
+    prefix="/fields",
+    tags=["Scout Sessions"],
 )
 app.include_router(
     scenario_router,
