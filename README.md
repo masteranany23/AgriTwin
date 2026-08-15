@@ -136,8 +136,11 @@ flowchart TD
   - Extracts GPS EXIF metadata to ensure photos are within field boundaries.
   - Calculates median RGB Green-Red Vegetation Index ($\text{GRVI} = \frac{G - R}{G + R}$) and converts to LAI.
   - Assigns a 30% observation error variance ($R = 0.30$), serving as a "Gentle Nudge" for the EnKF filter.
-- **Heterogeneous Observation Schema & Enums (`assimilation/models/observation.py`)**:
-  - Extends `ObservationSource` to support multi-modal observations: `SATELLITE`, `SENSOR`, `WEATHER`, `MANUAL`, `MODEL`, `SENTINEL1_SAR`, `SMARTPHONE_GRVI`, `IOT_SENSOR`, `WEATHER_STATION`, `MANUAL_SCOUT`.
+- **Observation Registry Service (`services/observation_registry_service.py`)**:
+  - Thin unified ingestion facade providing a standardized registration path for Sentinel, weather, IoT, weather-station, smartphone, and manual scouting observations.
+  - Normalizes timestamps (UTC), source enums, units, default uncertainties, and provider names.
+  - Integrates with `QualityControlService` for automated lifecycle status evaluation (`VALID`, `OUTLIER`, `REJECTED`).
+  - Exposes `POST /observations/register`.
 
 ### 4. Module 3.3 Multi-Source Data Fusion Pipeline (`fusion/`, `services/`)
 - **Temporal Gap Filling (`services/temporal_interpolation_service.py`)**:

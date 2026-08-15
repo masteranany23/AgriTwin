@@ -47,11 +47,13 @@ from backend.app.assimilation.models.observation_batch import (
 from backend.app.assimilation.repositories.observation_repository import ObservationRepository
 from backend.app.assimilation.schemas.observation import (
     ObservationCreate,
+    ObservationRegisterRequest,
     ObservationResponse,
     ObservationListResponse,
     ObservationBatchCreate,
     ObservationBatchResponse,
 )
+from backend.app.services.observation_registry_service import ObservationRegistryService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -136,6 +138,34 @@ def create_observation(
     logger.info(
         "POST /observations → id=%s var=%s source=%s",
         saved.id, saved.variable_name, saved.source.value,
+    )
+    return ObservationResponse.from_orm_row(saved)
+
+
+# ── POST /observations/register ───────────────────────────────────────────────
+
+@router.post(
+    "/register",
+    response_model=ObservationResponse,
+    status_code=201,
+    summary="Register a single observation through unified registry facade",
+    description=(
+        "Register a single heterogeneous observation (Sentinel, weather, IoT, "
+        "weather station, smartphone, manual scouting). Automatically normalizes "
+        "metadata, units, uncertainties, and QC status before persistence."
+    ),
+    tags=["Observations"],
+)
+def register_observation(
+    payload: ObservationRegisterRequest,
+    db: Session = Depends(get_db),
+) -> ObservationResponse:
+    """Register and ingest a single observation via ObservationRegistryService."""
+    registry_service = ObservationRegistryService(db)
+    saved = registry_service.register_observation(payload)
+    logger.info(
+        "POST /observations/register → id=%s var=%s source=%s status=%s",
+        saved.id, saved.variable_name, saved.source.value, saved.status.value,
     )
     return ObservationResponse.from_orm_row(saved)
 

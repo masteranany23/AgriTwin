@@ -242,6 +242,93 @@ class ObservationCreate(BaseModel):
     }
 
 
+class ObservationRegisterRequest(BaseModel):
+    """Request body for POST /observations/register.
+    
+    A flexible registration schema for single observation ingestion.
+    Allows units, uncertainty, provider_name, and status to be automatically
+    inferred/normalized by ObservationRegistryService if omitted.
+    """
+
+    field_id: Optional[uuid.UUID] = Field(
+        default=None,
+        description="UUID of the Field this observation belongs to.",
+    )
+    simulation_run_id: Optional[uuid.UUID] = Field(
+        default=None,
+        description="Associated SimulationRun UUID if applicable.",
+    )
+    batch_id: Optional[uuid.UUID] = Field(
+        default=None,
+        description="Associated ObservationBatch UUID if applicable.",
+    )
+    timestamp: datetime.datetime = Field(
+        ...,
+        description="UTC timestamp of the measurement. Must be timezone-aware.",
+        examples=["2024-03-15T06:30:00+00:00"],
+    )
+    variable_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Measured variable (e.g., LAI, SM, AIR_TEMPERATURE).",
+        examples=["LAI"],
+    )
+    value: float = Field(
+        ...,
+        description="Numerical measurement value.",
+        examples=[2.4],
+    )
+    source: str = Field(
+        ...,
+        description=(
+            "Observation origin category: SATELLITE, SENTINEL1_SAR, SMARTPHONE_GRVI, "
+            "IOT_SENSOR, WEATHER_STATION, MANUAL_SCOUT, SENSOR, WEATHER, MANUAL, MODEL."
+        ),
+        examples=["SENTINEL1_SAR"],
+    )
+    units: Optional[str] = Field(
+        default=None,
+        description="Physical units (inferred from variable_name if omitted).",
+        examples=["m2/m2"],
+    )
+    uncertainty: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        description="Measurement uncertainty standard deviation (inferred if omitted).",
+        examples=[0.3],
+    )
+    provider_name: Optional[str] = Field(
+        default=None,
+        description="Instrument or data provider name (inferred if omitted).",
+        examples=["Sentinel1_SAR"],
+    )
+    latitude: Optional[float] = Field(default=None, ge=-90.0, le=90.0)
+    longitude: Optional[float] = Field(default=None, ge=-180.0, le=180.0)
+    quality_score: Optional[int] = Field(default=None, ge=0, le=100)
+    cloud_cover: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[str] = Field(
+        default=None,
+        description="Initial status (VALID if omitted).",
+    )
+    raw_payload: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Raw measurement payload for provenance.",
+    )
+    notes: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Optional notes.",
+    )
+
+    @field_validator("timestamp")
+    @classmethod
+    def timestamp_must_be_timezone_aware(cls, v: datetime.datetime) -> datetime.datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamp must be timezone-aware.")
+        return v
+
+
 class ObservationResponse(BaseModel):
     """Response body for a single Observation.
 

@@ -204,6 +204,13 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
 - `WEATHER_STATION`: Local weather station telemetry.
 - `MANUAL_SCOUT`: Field agronomist manual scouting logs.
 
+### J. ObservationRegistryService Architecture
+`ObservationRegistryService` (`backend/app/services/observation_registry_service.py`) acts as a thin unified ingestion facade over `ObservationRepository`:
+- **Common Registration Path**: Normalizes incoming observation payloads from Sentinel, weather, IoT, weather-station, smartphone, and manual scouting sources.
+- **Metadata Normalization**: Standardizes timestamps to UTC, maps source string aliases to `ObservationSource` enum values, infers standard units (`LAI`: `m2/m2`, `SM`: `cm3/cm3`, `AIR_TEMPERATURE`: `degC`, etc.) and default uncertainties when omitted, and injects registry audit metadata into `raw_payload`.
+- **QC Integration**: Invokes `QualityControlService` on registered observations to assign initial lifecycle status (`VALID`, `OUTLIER`, `REJECTED`, `MISSING`).
+- **Facade Endpoint**: Mounted at `POST /observations/register`.
+
 ---
 
 ## 💻 5. Environment Execution Commands
