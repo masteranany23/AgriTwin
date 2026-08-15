@@ -104,11 +104,17 @@ class ObservationSource(str, enum.Enum):
                     Always flagged as MODEL so assimilation modules can
                     treat them separately from real observations.
     """
-    SATELLITE = "SATELLITE"
-    SENSOR    = "SENSOR"
-    WEATHER   = "WEATHER"
-    MANUAL    = "MANUAL"
-    MODEL     = "MODEL"
+    SATELLITE        = "SATELLITE"
+    SENSOR           = "SENSOR"
+    WEATHER          = "WEATHER"
+    MANUAL           = "MANUAL"
+    MODEL            = "MODEL"
+    # Extended heterogeneous observation source types
+    SENTINEL1_SAR   = "SENTINEL1_SAR"
+    SMARTPHONE_GRVI = "SMARTPHONE_GRVI"
+    IOT_SENSOR      = "IOT_SENSOR"
+    WEATHER_STATION  = "WEATHER_STATION"
+    MANUAL_SCOUT     = "MANUAL_SCOUT"
 
 
 class ObservationStatus(str, enum.Enum):
@@ -474,7 +480,7 @@ class Observation(TimestampMixin, Base):
             f"<Observation id={self.id!s:.8} "
             f"var={self.variable_name!r} "
             f"value={self.value:.4f} "
-            f"±{self.uncertainty:.4f} "
+            f"±{(f'{self.uncertainty:.4f}' if self.uncertainty is not None else 'dynamic')} "
             f"source={self.source.value} "
             f"ts={self.timestamp.date()} "
             f"status={self.status.value}>"

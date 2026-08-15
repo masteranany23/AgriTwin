@@ -128,7 +128,38 @@ def test_observation_batch_orm_create():
 def test_observation_source_enum_values():
     """OBS-03: ObservationSource has exactly the expected values."""
     values = {e.value for e in ObservationSource}
-    assert values == {"SATELLITE", "SENSOR", "WEATHER", "MANUAL", "MODEL"}
+    expected = {
+        "SATELLITE",
+        "SENSOR",
+        "WEATHER",
+        "MANUAL",
+        "MODEL",
+        "SENTINEL1_SAR",
+        "SMARTPHONE_GRVI",
+        "IOT_SENSOR",
+        "WEATHER_STATION",
+        "MANUAL_SCOUT",
+    }
+    assert values == expected
+
+
+def test_extended_observation_sources_persistence(test_db: Session):
+    """OBS-03b: Observations created with extended sources persist and query cleanly."""
+    repo = ObservationRepository(test_db)
+    new_sources = [
+        ObservationSource.SENTINEL1_SAR,
+        ObservationSource.SMARTPHONE_GRVI,
+        ObservationSource.IOT_SENSOR,
+        ObservationSource.WEATHER_STATION,
+        ObservationSource.MANUAL_SCOUT,
+    ]
+    for src in new_sources:
+        obs = _make_obs(variable_name="LAI", value=2.0)
+        obs.source = src
+        saved = repo.save_observation(obs)
+        assert saved.source == src
+        fetched = repo.get_by_id(saved.id)
+        assert fetched.source == src
 
 
 def test_observation_status_enum_values():

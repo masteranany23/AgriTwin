@@ -26,6 +26,7 @@ from backend.app.services.temporal_interpolation_service import TemporalInterpol
 from backend.app.services.spatial_alignment_service import SpatialAlignmentService
 from backend.app.services.confidence_estimator import ConfidenceEstimator
 from backend.app.services.multi_source_fusion_service import MultiSourceFusionService
+from backend.app.services.quality_control_service import QualityControlService
 from backend.app.assimilation.repositories.observation_repository import ObservationRepository
 from backend.app.api.schemas.fusion import (
     DataFusionPipelineRequest,
@@ -47,6 +48,7 @@ class DataFusionPipeline:
     Orchestrates the complete data fusion workflow.
     
     This service ties together all Module 3.3 submodules:
+    - QualityControl (centralized service)
     - TemporalAlignment (your existing service)
     - SpatialAlignment (new)
     - ConfidenceEstimation (new)
@@ -60,6 +62,7 @@ class DataFusionPipeline:
         self.confidence = ConfidenceEstimator()
         self.fusion = MultiSourceFusionService(db)
         self.obs_repo = ObservationRepository(db)
+        self.qc = QualityControlService()
     
     def process_daily(self, field_id: UUID, target_date: date, crop_type: str = "wheat") -> DailyFusedState:
         """
@@ -67,7 +70,7 @@ class DataFusionPipeline:
         
         Pipeline Flow:
         1. Fetch raw observations for this day (Module 3.2)
-        2. Observation Validation (physical bounds, outlier rejection)
+        2. Observation Validation via QualityControlService (physical bounds, outlier rejection)
         3. Temporal Alignment (interpolate if needed - your service)
         4. Spatial Alignment (resample to field grid)
         5. Confidence Estimation (compute R for EnKF)
@@ -91,18 +94,20 @@ class DataFusionPipeline:
             )
         
         # ============================================================
-        # STEP 2: Observation Validation (Physical Bounds)
+        # STEP 2: Observation Validation (QualityControlService)
         # ============================================================
         validated = []
         for obs in raw_obs:
-            if obs.variable == "LAI" and 0 <= obs.value <= 8:
-                validated.append(obs)
-            elif obs.variable == "SM" and 0 <= obs.value <= 0.6:
+            res = self.qc.evaluate_observation(obs)
+            if res.is_valid:
                 validated.append(obs)
             else:
+                var_name = getattr(obs, "variable_name", None) or getattr(obs, "variable", "")
+                val = getattr(obs, "value", None)
                 logger.warning(
-                    f"Observation {obs.id} failed validation. "
-                    f"Variable: {obs.variable}, Value: {obs.value}"
+                    f"Observation {getattr(obs, 'id', obs)} failed validation. "
+                    f"Status: {res.status.value}, Reason: {res.reason}, "
+                    f"Variable: {var_name}, Value: {val}"
                 )
         
         if not validated:
@@ -113,7 +118,7 @@ class DataFusionPipeline:
                 confidence=0.0,
                 quality_flag=QualityFlag.INVALID,
                 sources_used=[],
-                message="All observations failed validation (physical bounds)."
+                message="All observations failed validation (quality control / physical bounds)."
             )
         
         # ============================================================

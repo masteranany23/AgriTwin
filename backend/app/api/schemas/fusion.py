@@ -28,14 +28,23 @@ from enum import Enum
 
 class ObservationSource(str, Enum):
     """Source of observation data."""
-    SENTINEL2 = "SENTINEL2"
-    SENTINEL1_SAR = "SENTINEL1_SAR"
-    MODIS = "MODIS"
+    SENTINEL2       = "SENTINEL2"
+    SENTINEL1_SAR   = "SENTINEL1_SAR"
+    MODIS           = "MODIS"
     SMARTPHONE_GRVI = "SMARTPHONE_GRVI"
-    SMARTPHONE_RGB = "SMARTPHONE_RGB"
-    ERA5_LAND = "ERA5_LAND"
-    NASA_POWER = "NASA_POWER"
-    FUSED = "FUSED"
+    SMARTPHONE_RGB  = "SMARTPHONE_RGB"
+    ERA5_LAND       = "ERA5_LAND"
+    NASA_POWER      = "NASA_POWER"
+    FUSED           = "FUSED"
+    # General / Heterogeneous observation sources
+    SATELLITE       = "SATELLITE"
+    SENSOR          = "SENSOR"
+    WEATHER         = "WEATHER"
+    MANUAL          = "MANUAL"
+    MODEL           = "MODEL"
+    IOT_SENSOR      = "IOT_SENSOR"
+    WEATHER_STATION = "WEATHER_STATION"
+    MANUAL_SCOUT    = "MANUAL_SCOUT"
 
 
 class SpatialResolution(str, Enum):

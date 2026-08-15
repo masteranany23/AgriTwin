@@ -173,7 +173,7 @@ def test_build_obs_vector_single_obs():
     """AS-05: Single LAI observation correctly populates y and R."""
     service, _, _ = _make_service()
     obs = [_make_obs("LAI", value=2.4, uncertainty=0.3)]
-    y, R, n = service._build_observation_vector(obs)
+    y, R, n, *_ = service._build_observation_vector(obs)
 
     lai_idx = STATE_INDEX["lai"]
     assert n == 1
@@ -193,7 +193,7 @@ def test_build_obs_vector_aggregation_mean():
         _make_obs("LAI", value=2.0, uncertainty=0.2),
         _make_obs("LAI", value=3.0, uncertainty=0.4),
     ]
-    y, R, n = service._build_observation_vector(obs)
+    y, R, n, *_ = service._build_observation_vector(obs)
     lai_idx = STATE_INDEX["lai"]
 
     # Expected: weights = [1/0.04, 1/0.16] = [25, 6.25]; sum = 31.25
@@ -210,7 +210,7 @@ def test_build_obs_vector_aggregation_best_quality():
         _make_obs("LAI", value=2.0, uncertainty=0.2, quality_score=60),
         _make_obs("LAI", value=3.0, uncertainty=0.4, quality_score=90),
     ]
-    y, _, n = service._build_observation_vector(obs)
+    y, _, n, *_ = service._build_observation_vector(obs)
     lai_idx = STATE_INDEX["lai"]
     assert y[lai_idx] == pytest.approx(3.0)
 
@@ -219,7 +219,7 @@ def test_build_obs_vector_unknown_variable_skipped():
     """AS-08: Observations for unknown variables (not in state vector) are skipped."""
     service, _, _ = _make_service()
     obs = [_make_obs("CANOPY_TEMPERATURE", value=25.0, uncertainty=1.0)]
-    y, R, n = service._build_observation_vector(obs)
+    y, R, n, *_ = service._build_observation_vector(obs)
     assert n == 0
     assert all(np.isnan(y))
 
@@ -227,7 +227,7 @@ def test_build_obs_vector_unknown_variable_skipped():
 def test_build_obs_vector_empty_returns_all_nan():
     """AS-09: Empty observation list → y is all NaN, n=0."""
     service, _, _ = _make_service()
-    y, R, n = service._build_observation_vector([])
+    y, R, n, *_ = service._build_observation_vector([])
     assert n == 0
     assert all(np.isnan(y))
 
@@ -554,7 +554,7 @@ def test_cycle_skips_unknown_sv_variables():
     """AS-24: Observations for variables not in the state vector build empty y."""
     service, _, _ = _make_service()
     obs = [_make_obs("NDVI", value=0.75, uncertainty=0.05)]
-    y, R, n = service._build_observation_vector(obs)
+    y, R, n, *_ = service._build_observation_vector(obs)
     assert n == 0
 
 

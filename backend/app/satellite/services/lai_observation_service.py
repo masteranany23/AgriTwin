@@ -16,6 +16,7 @@ from backend.app.satellite.providers.sentinel2_provider import Sentinel2Provider
 from backend.app.satellite.processors.lai_estimator import LAIEstimator
 from backend.app.satellite.processors.vegetation_indices import compute_ndvi, compute_osavi, compute_seli
 from backend.app.satellite.schemas.satellite_scene import SatelliteScene
+from backend.app.services.quality_control_service import QualityControlService
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,12 @@ class LAIObservationService:
         obs_repo: ObservationRepository,
         provider: Sentinel2Provider,
         estimator: LAIEstimator,
+        qc: Optional[QualityControlService] = None,
     ) -> None:
         self.obs_repo = obs_repo
         self.provider = provider
         self.estimator = estimator
+        self.qc = qc or QualityControlService()
 
     def ingest_lai_observations(
         self,
@@ -106,10 +109,10 @@ class LAIObservationService:
         processed_scenes: list[SatelliteScene] = []
 
         for scene in scenes:
-            # Skip scenes with excessive cloud cover
-            if scene.cloud_cover > max_cloud_cover:
-                logger.debug("Skipping scene %s: cloud cover %.2f > threshold %.2f", 
-                             scene.metadata.get("scene_id"), scene.cloud_cover, max_cloud_cover)
+            # Skip scenes with excessive cloud cover using QualityControlService
+            passed_cc, cc_reason = self.qc.check_cloud_cover(scene.cloud_cover, max_cloud_cover=max_cloud_cover)
+            if not passed_cc:
+                logger.debug("Skipping scene %s: %s", scene.metadata.get("scene_id"), cc_reason)
                 continue
 
             # Compute indices
@@ -139,9 +142,12 @@ class LAIObservationService:
             # Estimate LAI
             estimated_lai = self.estimator.estimate_lai(index_value, index_name)
             scene.estimated_lai = estimated_lai
-            if math.isnan(estimated_lai):
-                logger.warning("Estimated LAI is NaN for scene date %s. Skipping observation persistence.",
-                               scene.acquisition_date)
+            
+            # Validate estimated LAI using QualityControlService
+            passed_bounds, bounds_reason = self.qc.check_physical_bounds("LAI", estimated_lai)
+            if not passed_bounds:
+                logger.warning("Estimated LAI is invalid for scene date %s: %s. Skipping observation persistence.",
+                               scene.acquisition_date, bounds_reason)
                 continue
 
             # Create UTC timestamp for observation

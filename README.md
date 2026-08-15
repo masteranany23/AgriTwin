@@ -136,15 +136,18 @@ flowchart TD
   - Extracts GPS EXIF metadata to ensure photos are within field boundaries.
   - Calculates median RGB Green-Red Vegetation Index ($\text{GRVI} = \frac{G - R}{G + R}$) and converts to LAI.
   - Assigns a 30% observation error variance ($R = 0.30$), serving as a "Gentle Nudge" for the EnKF filter.
+- **Heterogeneous Observation Schema & Enums (`assimilation/models/observation.py`)**:
+  - Extends `ObservationSource` to support multi-modal observations: `SATELLITE`, `SENSOR`, `WEATHER`, `MANUAL`, `MODEL`, `SENTINEL1_SAR`, `SMARTPHONE_GRVI`, `IOT_SENSOR`, `WEATHER_STATION`, `MANUAL_SCOUT`.
 
 ### 4. Module 3.3 Multi-Source Data Fusion Pipeline (`fusion/`, `services/`)
 - **Temporal Gap Filling (`services/temporal_interpolation_service.py`)**:
   - Offers linear, cubic spline, and Savitzky-Golay filter interpolation.
   - **Monsoon Cloud-Gap Detection**: Detects gaps exceeding 10 consecutive days. During monsoon cloud cover, returns `HOLD_OPEN_LOOP` signal to instruct the EnKF to hold open-loop rather than assimilating distorted interpolated values.
 - **Spatial Alignment Service (`services/spatial_alignment_service.py`)**: Aligns point observations, 10m Sentinel rasters, and 11km ERA5-Land grids to exact GeoJSON field boundary polygons.
+- **Centralized Quality Control Service (`services/quality_control_service.py`)**: Consolidates observation QC logic across assimilation, satellite ingestion, and fusion pipelines. Evaluates explicit `ObservationStatus` (`VALID`, `OUTLIER`, `MISSING`, `REJECTED`) against physical variable bounds, satellite cloud thresholds, quality score cutoffs, and statistical Z-score outlier gates relative to forecast ensembles.
 - **Confidence Estimator (`services/confidence_estimator.py`)**: Dynamically computes observation confidence scores ($0.0 - 1.0$) and computes the observation error covariance matrix ($R$) for EnKF ingestion.
 - **Multi-Source Bayesian Fusion (`services/multi_source_fusion_service.py`)**: Performs Bayesian optimal weighting to combine Sentinel-2, smartphone GRVI, ERA5-Land, and IoT ground sensors into a unified, high-confidence state observation stream.
-- **End-to-End Fusion Pipeline (`services/data_fusion_pipeline.py`)**: Executes full chain: Validation $\rightarrow$ Temporal $\rightarrow$ Spatial $\rightarrow$ Confidence $\rightarrow$ Fusion via `POST /fusion/pipeline`.
+- **End-to-End Fusion Pipeline (`services/data_fusion_pipeline.py`)**: Executes full chain: Quality Control $\rightarrow$ Temporal $\rightarrow$ Spatial $\rightarrow$ Confidence $\rightarrow$ Fusion via `POST /fusion/pipeline`.
 
 ### 5. Ensemble Kalman Filter (EnKF) Sequential Assimilation (`assimilation/`)
 - **Stochastic Ensemble Generation (`assimilation/ensemble/ensemble_manager.py`)**:
@@ -163,9 +166,10 @@ flowchart TD
 - **Non-Destructive State Updater (`assimilation/updater/state_updater.py`)**:
   - Re-partitions leaf biomass across green leaf age classes (`LV`) to match EnKF posterior `WLV` without triggering mass balance crashes.
   - Updates soil water availability and root zone distribution.
-- **Quality Control & Persistence (`assimilation/services/assimilation_service.py`)**:
-  - Applies Z-score outlier rejection and minimum quality score thresholds.
-  - Logs step-by-step priors, posteriors, innovations, and quality metrics into `AssimilationState`.
+- **Quality Control, Dynamic Data Fusion & Persistence (`assimilation/services/assimilation_service.py`)**:
+  - Delegates pre-assimilation filtering to `QualityControlService` for physical bounds, quality scores, satellite cloud cover, and forecast Z-score outlier gating.
+  - Dynamically routes valid observations through `ConfidenceEstimator` and `MultiSourceFusionService` to generate dynamic observation error covariance ($R$) matrices and inverse-variance fused observation vectors ($y$).
+  - Logs step-by-step priors, posteriors, innovations, dynamic $R$ variances, and fusion diagnostics metadata into `AssimilationState`.
 - **Diagnostics & Visualization (`assimilation/services/assimilation_visualization_service.py`)**:
   - *History*: Complete audit trail of cycle updates.
   - *Timeseries*: Zero-Order Hold (ZOH) offset propagated prediction curves comparing open-loop vs EnKF.

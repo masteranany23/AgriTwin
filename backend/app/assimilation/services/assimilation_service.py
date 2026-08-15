@@ -46,6 +46,10 @@ from backend.app.assimilation.repositories.observation_repository import Observa
 from backend.app.assimilation.state.state_vector import STATE_VARIABLES, STATE_INDEX, STATE_DIM, StateVector
 from backend.app.assimilation.updater.state_updater import StateUpdater, InjectionResult
 from backend.app.models.assimilation_run import AssimilationRun
+from backend.app.services.confidence_estimator import ConfidenceEstimator
+from backend.app.services.multi_source_fusion_service import MultiSourceFusionService
+from backend.app.services.quality_control_service import QualityControlService, QCConfig
+from backend.app.api.schemas.fusion import FusionRequest, ConfidenceRequest, ObservationSource as FusionObservationSource
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,32 @@ _OBS_VAR_TO_SV: dict[str, str] = {
     "DVS":   "dvs",
     "RD":    "rd",
 }
+
+
+def _map_source_to_fusion_enum(obs: Observation) -> FusionObservationSource:
+    src_val = obs.source.value if hasattr(obs.source, "value") else str(obs.source)
+    raw_prov = getattr(obs, "provider_name", "") or ""
+    prov = str(raw_prov).upper()
+    if src_val == "SATELLITE":
+        if "MODIS" in prov:
+            return FusionObservationSource.MODIS
+        elif "SENTINEL1" in prov or "SAR" in prov:
+            return FusionObservationSource.SENTINEL1_SAR
+        return FusionObservationSource.SENTINEL2
+    elif src_val == "SENSOR":
+        if "SAR" in prov or "SENTINEL1" in prov:
+            return FusionObservationSource.SENTINEL1_SAR
+        return FusionObservationSource.ERA5_LAND
+    elif src_val == "MANUAL":
+        return FusionObservationSource.SMARTPHONE_GRVI
+    elif src_val == "WEATHER":
+        return FusionObservationSource.ERA5_LAND
+    elif src_val == "MODEL":
+        return FusionObservationSource.FUSED
+    try:
+        return FusionObservationSource(src_val)
+    except (ValueError, TypeError):
+        return FusionObservationSource.FUSED
 
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -83,7 +113,7 @@ class AssimilationConfig:
     """Configuration for a full-season assimilation run."""
     # ── Observation sources to include
     include_sources: list[str] = field(
-        default_factory=lambda: ["SATELLITE", "SENSOR", "MANUAL", "WEATHER"]
+        default_factory=lambda: [s.value for s in ObservationSource]
     )
     # ── QC settings
     qc: QCFilter = field(default_factory=QCFilter)
@@ -116,6 +146,7 @@ class AssimilationCycleResult:
     persisted_state_id:  Optional[uuid.UUID]         # AssimilationState DB pk
     skipped:             bool = False                # True if min_obs not met
     skip_reason:         Optional[str] = None
+    fusion_diagnostics:  dict = field(default_factory=dict)  # dynamic R & fusion diagnostics
 
 
 # ── Full-season result ────────────────────────────────────────────────────────
@@ -171,6 +202,10 @@ class AssimilationService:
             inject_rd=self.config.inject_rd,
             verify=False,  # speed: skip read-back in production loop
         )
+        self.confidence_estimator = ConfidenceEstimator()
+        db_session = getattr(self.obs_repo, "db", None)
+        self.fusion_service = MultiSourceFusionService(db_session=db_session) if db_session else None
+        self.qc_service = QualityControlService()
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -343,8 +378,10 @@ class AssimilationService:
                 skip_reason=f"Only {len(qc_obs)} obs passed QC (min={self.config.min_obs_for_update})",
             )
 
-        # ── 4. Build y and R ──────────────────────────────────────────────
-        y, R, obs_assimilated = self._build_observation_vector(qc_obs)
+        # ── 4. Build y and R via Data Fusion Pipeline ──────────────────────────
+        y, R, obs_assimilated, fusion_diag = self._build_observation_vector(
+            qc_obs, field_id=field_id, obs_date=obs_date
+        )
 
         if obs_assimilated == 0:
             return AssimilationCycleResult(
@@ -360,6 +397,7 @@ class AssimilationService:
                 persisted_state_id=None,
                 skipped=True,
                 skip_reason="No QC-passed obs mapped to a known StateVector variable",
+                fusion_diagnostics=fusion_diag,
             )
 
         # ── 5. EnKF update with explicit observation operator ───────────────
@@ -404,6 +442,7 @@ class AssimilationService:
             innovation=self._vec_to_dict(d),
             injection_results=injection_results,
             persisted_state_id=state_id,
+            fusion_diagnostics=fusion_diag,
         )
 
     # ── Observation helpers ───────────────────────────────────────────────
@@ -452,64 +491,38 @@ class AssimilationService:
         X_f: np.ndarray,
         x_mean_f: np.ndarray,
     ) -> list[Observation]:
-        """Apply quality filters; return observations that pass all checks."""
-        cfg = self.config.qc
-        passed: list[Observation] = []
-
-        for obs in observations:
-            # Source filter
-            if obs.source.value not in self.config.include_sources:
-                logger.debug("QC skip (source): %s", obs)
-                continue
-
-            # Quality score filter
-            if cfg.min_quality_score is not None and obs.quality_score is not None:
-                if obs.quality_score < cfg.min_quality_score:
-                    logger.debug("QC skip (quality_score=%s): %s", obs.quality_score, obs)
-                    continue
-
-            # Cloud cover filter (satellite only)
-            if (
-                obs.source == ObservationSource.SATELLITE
-                and cfg.max_cloud_cover is not None
-                and obs.cloud_cover is not None
-                and obs.cloud_cover > cfg.max_cloud_cover
-            ):
-                logger.debug("QC skip (cloud_cover=%.2f): %s", obs.cloud_cover, obs)
-                continue
-
-            # Outlier z-score gate vs ensemble forecast
-            sv_key = _OBS_VAR_TO_SV.get(obs.variable_name.upper())
-            if sv_key is not None:
-                idx = STATE_INDEX[sv_key]
-                ens_mean = x_mean_f[idx]
-                ens_std  = float(np.nanstd(X_f[idx, :]))
-                if not np.isnan(ens_mean) and ens_std > 0:
-                    z = abs(obs.value - ens_mean) / ens_std
-                    if z > cfg.max_z_score:
-                        logger.debug(
-                            "QC skip (outlier z=%.2f > %.2f): %s", z, cfg.max_z_score, obs
-                        )
-                        continue
-
-            passed.append(obs)
-
-        return passed
+        """Apply quality filters via QualityControlService; return observations that pass all checks."""
+        qc_config = QCConfig(
+            min_quality_score=self.config.qc.min_quality_score,
+            max_cloud_cover=self.config.qc.max_cloud_cover,
+            max_z_score=self.config.qc.max_z_score,
+            include_sources=self.config.include_sources,
+        )
+        return self.qc_service.filter_observations(
+            observations,
+            X_f=X_f,
+            x_mean_f=x_mean_f,
+            config=qc_config,
+        )
 
     def _build_observation_vector(
-        self, observations: list[Observation]
-    ) -> tuple[np.ndarray, np.ndarray, int]:
-        """Aggregate observations into the EnKF y vector and R matrix.
+        self,
+        observations: list[Observation],
+        field_id: Optional[uuid.UUID] = None,
+        obs_date: Optional[datetime.date] = None,
+    ) -> tuple[np.ndarray, np.ndarray, int, dict]:
+        """Aggregate & fuse observations into the EnKF y vector and dynamic R matrix.
 
-        Multiple observations for the same variable on the same date are
-        combined according to config.aggregation ("mean" or "best_quality").
+        Processes raw QC-passed observations through ConfidenceEstimator and
+        MultiSourceFusionService to generate dynamic observation error covariance (R)
+        and fused observation vector (y).
 
         Returns:
-            y: observation vector shape (STATE_DIM,), NaN for unobserved vars
-            R: observation error covariance (STATE_DIM, STATE_DIM), diagonal
+            y: fused observation vector shape (STATE_DIM,), NaN for unobserved vars
+            R: dynamic observation error covariance (STATE_DIM, STATE_DIM), diagonal
             n_assimilated: number of distinct variables in y (non-NaN count)
+            fusion_diagnostics: dictionary containing fusion metadata & dynamic R values
         """
-        # Group by sv_key
         groups: dict[str, list[Observation]] = {}
         for obs in observations:
             sv_key = _OBS_VAR_TO_SV.get(obs.variable_name.upper())
@@ -519,31 +532,112 @@ class AssimilationService:
 
         y = np.full(STATE_DIM, np.nan)
         r_diag = np.full(STATE_DIM, np.nan)
+        fusion_diagnostics: dict[str, dict] = {}
 
         for sv_key, obs_list in groups.items():
             idx = STATE_INDEX[sv_key]
 
-            if self.config.aggregation == "best_quality":
-                best = max(
-                    obs_list,
-                    key=lambda o: (o.quality_score or 0),
-                )
-                y[idx]      = best.value
-                r_diag[idx] = best.uncertainty ** 2
-            else:  # "mean"
-                values  = np.array([o.value       for o in obs_list])
-                errors  = np.array([o.uncertainty for o in obs_list])
-                # Inverse-variance weighted mean
-                weights = 1.0 / (errors ** 2)
-                y[idx]      = float(np.average(values, weights=weights))
-                r_diag[idx] = float(1.0 / np.sum(weights))  # combined variance
+            # 1. Compute dynamic confidence scores & R values
+            prepared_obs = []
+            for obs in obs_list:
+                fusion_src = _map_source_to_fusion_enum(obs)
+                ts = getattr(obs, "timestamp", None)
+                obs_dt = ts.date() if isinstance(ts, datetime.datetime) else (ts if isinstance(ts, datetime.date) else None)
+                c_date = obs_date or obs_dt or datetime.date.today()
+                days_since = max(0, (datetime.date.today() - c_date).days) if isinstance(c_date, datetime.date) else 0
 
-        # R = diagonal matrix; off-diagonals are zero (independent obs assumption)
+                raw_fid = field_id or getattr(obs, "field_id", None)
+                f_id = raw_fid if isinstance(raw_fid, (uuid.UUID, str)) else None
+
+                raw_cloud = getattr(obs, "cloud_cover", 0.0)
+                cloud_cover = raw_cloud if isinstance(raw_cloud, (int, float)) else 0.0
+
+                val = getattr(obs, "value", 0.0)
+                obs_val = float(val) if isinstance(val, (int, float)) else 0.0
+
+                conf_req = ConfidenceRequest(
+                    source=fusion_src,
+                    value=obs_val,
+                    cloud_cover=float(cloud_cover),
+                    viewing_angle=0.0,
+                    sensor_health=1.0,
+                    days_since_observation=int(days_since),
+                    field_id=f_id,
+                )
+                conf_resp = self.confidence_estimator.compute_confidence(conf_req)
+
+                unc = getattr(obs, "uncertainty", None)
+                if unc is not None and isinstance(unc, (int, float)) and unc > 0:
+                    r_std = float(unc)
+                else:
+                    r_std = float(conf_resp.observation_error_r)
+
+                r_var = r_std ** 2
+                prepared_obs.append((obs, fusion_src, conf_resp, r_std, r_var))
+
+            if not prepared_obs:
+                continue
+
+            # 2. Fuse observations
+            if self.config.aggregation == "best_quality":
+                best_item = max(
+                    prepared_obs,
+                    key=lambda item: (item[0].quality_score or 0, item[2].confidence_score),
+                )
+                fused_val = best_item[0].value
+                var_combined = best_item[4]
+                sources_used = [best_item[1].value]
+                conf_scores = [best_item[2].confidence_score]
+            elif sv_key == "lai" and len(set(f_src for _, f_src, _, _, _ in prepared_obs)) > 1 and self.fusion_service:
+                c_date = obs_date or (obs_list[0].timestamp.date() if getattr(obs_list[0], "timestamp", None) else datetime.date.today())
+                max_cloud = max([getattr(o, "cloud_cover", 0.0) or 0.0 for o in obs_list])
+                req_fid = field_id if isinstance(field_id, (uuid.UUID, str)) else uuid.uuid4()
+                fusion_req = FusionRequest(
+                    field_id=req_fid,
+                    date=c_date,
+                    observations=[
+                        {
+                            "source": f_src.value,
+                            "value": obs.value,
+                            "confidence": c_resp.confidence_score,
+                            "observation_error_r": r_std,
+                            "variance": r_var,
+                        }
+                        for obs, f_src, c_resp, r_std, r_var in prepared_obs
+                    ],
+                    cloud_cover=max_cloud,
+                )
+                fusion_resp = self.fusion_service.fuse_lai(fusion_req)
+                fused_val = fusion_resp.fused_lai
+                inv_vars = [1.0 / max(1e-6, r_var) for _, _, _, _, r_var in prepared_obs]
+                var_combined = 1.0 / max(1e-6, sum(inv_vars))
+                sources_used = fusion_resp.contributing_sources or [f_src.value for _, f_src, _, _, _ in prepared_obs]
+                conf_scores = [c_resp.confidence_score for _, _, c_resp, _, _ in prepared_obs]
+            else:
+                vals = np.array([obs.value for obs, _, _, _, _ in prepared_obs])
+                r_vars = np.array([r_var for _, _, _, _, r_var in prepared_obs])
+                inv_vars = 1.0 / np.maximum(1e-6, r_vars)
+                fused_val = float(np.average(vals, weights=inv_vars))
+                var_combined = float(1.0 / np.sum(inv_vars))
+                sources_used = [f_src.value for _, f_src, _, _, _ in prepared_obs]
+                conf_scores = [c_resp.confidence_score for _, _, c_resp, _, _ in prepared_obs]
+
+            y[idx] = fused_val
+            r_diag[idx] = var_combined
+            fusion_diagnostics[sv_key] = {
+                "fused_value": round(float(fused_val), 4),
+                "dynamic_r_variance": round(float(var_combined), 6),
+                "dynamic_r_std": round(float(np.sqrt(var_combined)), 4),
+                "obs_count": len(obs_list),
+                "sources_used": sources_used,
+                "confidence_scores": conf_scores,
+            }
+
         r_diag_safe = np.where(np.isnan(r_diag), 0.0, r_diag)
         R = np.diag(r_diag_safe)
-
         n_assimilated = int(np.sum(~np.isnan(y)))
-        return y, R, n_assimilated
+
+        return y, R, n_assimilated, fusion_diagnostics
 
     # ── Persistence ───────────────────────────────────────────────────────
 

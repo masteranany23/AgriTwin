@@ -174,6 +174,36 @@ Because EnKF corrections are applied at discrete observation dates, the comparat
 ### F. Monsoon Cloud-Gap Trigger (`HOLD_OPEN_LOOP`)
 When cloud cover obscures satellite view for $>10$ consecutive days, temporal interpolation outputs `HOLD_OPEN_LOOP`. The EnKF assimilation service MUST interpret this signal to bypass state vector updating, holding open-loop forecast execution until uncorrupted observations become available.
 
+### G. Dynamic Data Fusion & EnKF Integration Flow
+The canonical observation vector construction in `AssimilationService._build_observation_vector` dynamically bridges physical `Observation` inputs to the EnKF filter step:
+1. **Quality Control Filtering**: Raw observations are filtered using `QualityControlService` against physical bounds, quality score cutoffs, cloud thresholds, and Z-score outlier gates relative to ensemble forecasts.
+2. **Confidence Estimation**: Each valid observation undergoes dynamic confidence scoring via `ConfidenceEstimator.estimate_confidence()` based on sensor provider base reliability, observation age decay, spatial alignment, and cloud cover.
+3. **Multi-Source Bayesian Fusion**: When multiple observations exist for the same variable on a given date (e.g. Sentinel-2 LAI + Smartphone GRVI), `MultiSourceFusionService.fuse_observations()` applies inverse-variance weighting ($\frac{1}{\sigma^2}$) to compute a unified fused measurement value.
+4. **Dynamic $R$-Matrix Construction**: Computes the diagonal observation error covariance matrix $R = \text{diag}(\sigma_i^2)$ dynamically from confidence scores, preserving explicit observation uncertainty overrides when provided.
+5. **Diagnostics & Auditability**: Stores complete fusion metadata, including sources used, individual confidence scores, and dynamic variances, directly inside the `fusion_diagnostics` property of `AssimilationCycleResult` and `AssimilationState`.
+
+### H. Centralized QualityControlService Architecture
+Observation quality control across `AssimilationService`, `DataFusionPipeline`, and `LAIObservationService` is consolidated into `QualityControlService` (`backend/app/services/quality_control_service.py`):
+- **Explicit Lifecycle Status Return**: Returns explicit `ObservationStatus` enum values:
+  - `VALID`: Observation passed physical bounds, cloud cover, quality score, and statistical Z-score outlier checks.
+  - `OUTLIER`: Observation failed physical bounds check (e.g., $\text{LAI} \notin [0, 8.0]$, $\text{SM} \notin [0, 0.60]$) or statistical Z-score gate ($|z| > \text{max\_z\_score}$).
+  - `MISSING`: Observation value is `None` or `NaN`.
+  - `REJECTED`: Observation failed minimum quality score ($<60$), satellite cloud cover cutoff ($>0.20$), explicit DB rejection status, or source inclusion check.
+- **Pre-Assimilation & Pre-Fusion Execution**: QC runs prior to temporal/spatial interpolation, confidence scoring, multi-source fusion, and EnKF state matrix updating.
+
+### I. Extended Heterogeneous ObservationSources
+The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) supports the full set of observational data origins:
+- `SATELLITE`: Optical remote sensing (Sentinel-2, MODIS, Landsat).
+- `SENSOR`: In-situ ground sensors.
+- `WEATHER`: Weather station / ERA5-Land gridded weather observations.
+- `MANUAL`: Crop scouting measurements.
+- `MODEL`: Synthetic model output observations.
+- `SENTINEL1_SAR`: Synthetic Aperture Radar (soil moisture / canopy structural density).
+- `SMARTPHONE_GRVI`: Smartphone camera W-shape GRVI field photo observations.
+- `IOT_SENSOR`: Automated IoT telemetry / soil probe arrays.
+- `WEATHER_STATION`: Local weather station telemetry.
+- `MANUAL_SCOUT`: Field agronomist manual scouting logs.
+
 ---
 
 ## 💻 5. Environment Execution Commands
