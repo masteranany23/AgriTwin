@@ -195,8 +195,13 @@ flowchart TD
   - Computes daily mean trajectories, ensemble standard deviations ($\sigma$), and 95% prediction intervals ($P_{2.5}$ to $P_{97.5}$) for state variables (`LAI`, `SM`, `TAGP`, `TWSO`, `DVS`, `RFTRA`).
   - Computes harvest yield forecast (`TWSO` at harvest date) with mean, standard deviation, 95% prediction interval, and min/max bounds.
   - Computes statistical uncertainty metrics (yield Coefficient of Variation $\text{CV} = \sigma / \mu$, 95% prediction interval width, and relative uncertainty percentage).
-  - Documents forecast diagnostics including forecast horizon in days, ensemble size, assimilated cycles count, and latest assimilation date.
-  - Mounted via `GET /assimilation/{simulation_id}/forecast`.
+### 9. Residual Yield Model Abstraction (`residual/`)
+- **Residual Model Abstraction (`residual/base.py`, `no_residual.py`, `registry.py`)**:
+  - Defines target residual $\text{residual\_target} = \text{observed\_yield} - \text{assimilated\_WOFOST\_yield}$.
+  - Provides the abstract `ResidualModel` interface enforcing methods for availability checks (`is_available()`), applicability checks (`is_applicable()`), residual prediction (`predict_residual()`), uncertainty estimation (`predict_uncertainty()`), and yield correction application (`apply_correction()`).
+  - Includes `NoResidualModel` default identity fallback: when no validated ML model artifact exists, `is_available()` returns `False` and returns the assimilated WOFOST prediction unchanged with zero residual correction.
+  - Includes `ResidualModelRegistry` for managing and resolving crop/region-specific residual models.
+  - Strictly guarantees zero fabricated corrections when no validated model is present.
 
 ---
 
@@ -338,6 +343,11 @@ AgriTwin/
 │       ├── features/                    # Leakage-Safe Feature Engine
 │       │   ├── feature_engine.py        # Tabular feature extraction engine (ΔLAI/Δt, ΔTAGP/Δt, stress, innovation, obs quality)
 │       │   └── schemas.py               # FeatureVector & category Pydantic schemas
+│       ├── residual/                    # Residual Yield Model Abstraction
+│       │   ├── base.py                  # ResidualModel ABC interface
+│       │   ├── no_residual.py           # NoResidualModel default identity fallback
+│       │   ├── registry.py              # ResidualModelRegistry manager
+│       │   └── schemas.py               # ModelMetadata & prediction schemas
 │       ├── scenario/                    # Deterministic Scenario Sweeper Subsystem
 │       │   ├── api/                     # POST /scenarios endpoints
 │       │   ├── generators/              # Sowing date, variety, & irrigation generators

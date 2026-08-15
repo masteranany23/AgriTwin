@@ -235,6 +235,14 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
 - **Uncertainty Metrics**: Yield CV ($\sigma / \mu$), 95% PI width, and relative uncertainty percentage.
 - **Endpoint**: Mounted via `GET /assimilation/{simulation_id}/forecast`.
 
+### N. Residual Model Abstraction (`residual/`)
+`ResidualModel` (`backend/app/residual/`) provides an optional abstraction layer for modeling yield residual errors:
+- **Target Target Definition**: $\text{residual\_target} = \text{observed\_yield} - \text{assimilated\_WOFOST\_yield}$.
+- **No Model Training**: Contains no ML fitting or training loops; defines contracts and fallback defaults only.
+- **`ResidualModel` ABC Interface**: Defines `metadata`, `is_applicable()`, `is_available()`, `predict_residual()`, `predict_uncertainty()`, and `apply_correction()`.
+- **`NoResidualModel` Implementation**: Default identity fallback used when no validated ML model artifact exists. Guarantees `is_available() == False`, `predict_residual() == 0.0`, and returns the assimilated WOFOST prediction unchanged ($y_{\text{corrected}} = y_{\text{assimilated}}$).
+- **`ResidualModelRegistry`**: Manages resolution of crop/region-specific models with automatic fallback to `NoResidualModel`.
+
 ---
 
 ## 💻 5. Environment Execution Commands
