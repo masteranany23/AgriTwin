@@ -189,7 +189,14 @@ flowchart TD
   - Computes thermal-stress indicators: heat stress days ($T_{\max} > 35^\circ\text{C}$), cold stress days ($T_{\min} < 5^\circ\text{C}$), and diurnal temperature range metrics.
   - Computes EnKF innovation statistics (mean innovation, latest innovation per variable) and ensemble prior/posterior spread.
   - Computes observation quality indicators (valid/rejected counts, mean quality score, sources present) and observation age relative to `as_of_date`.
-  - Guarantees strict temporal leakage safety by filtering out all records with timestamp $> \text{as\_of\_date}$.
+### 8. Ensemble Forward Trajectory Forecast Service (`services/forecast_service.py`)
+- **Forward Trajectory Forecast Engine (`ForecastService`)**:
+  - Reuses existing WOFOST `EnsembleManager` infrastructure to generate forward trajectories from the latest EnKF assimilation state through `harvest_date`.
+  - Computes daily mean trajectories, ensemble standard deviations ($\sigma$), and 95% prediction intervals ($P_{2.5}$ to $P_{97.5}$) for state variables (`LAI`, `SM`, `TAGP`, `TWSO`, `DVS`, `RFTRA`).
+  - Computes harvest yield forecast (`TWSO` at harvest date) with mean, standard deviation, 95% prediction interval, and min/max bounds.
+  - Computes statistical uncertainty metrics (yield Coefficient of Variation $\text{CV} = \sigma / \mu$, 95% prediction interval width, and relative uncertainty percentage).
+  - Documents forecast diagnostics including forecast horizon in days, ensemble size, assimilated cycles count, and latest assimilation date.
+  - Mounted via `GET /assimilation/{simulation_id}/forecast`.
 
 ---
 
@@ -347,6 +354,7 @@ AgriTwin/
 │       │   ├── confidence_estimator.py   # Observation error matrix R generator
 │       │   ├── multi_source_fusion_service.py # Bayesian multi-source fusion engine
 │       │   ├── data_fusion_pipeline.py  # End-to-end Module 3.3 fusion pipeline
+│       │   ├── forecast_service.py      # Ensemble forward trajectory forecast service
 │       │   └── error_correction_service.py # Diagnostic residual service (Deprecated direct DB mutation)
 │       ├── simulation/                  # PCSE WOFOST Engine Adapters
 │       │   ├── engine.py                # WOFOST 7.2 execution runner

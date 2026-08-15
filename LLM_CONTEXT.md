@@ -227,6 +227,14 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
   - `observation_quality`: Total/valid/rejected observation counts, mean quality score, sources present, and observation age (days since last valid observation).
 - **Tabular Flat Output**: Provides `feature_flat_dict` containing flattened numerical key-value pairs suitable for downstream modeling or analytical queries.
 
+### M. Ensemble Forward Trajectory Forecast (`ForecastService`)
+`ForecastService` (`backend/app/services/forecast_service.py`) generates forward trajectories from the latest EnKF assimilation state through harvest date:
+- **No Secondary Engine**: Reuses the core `EnsembleManager` WOFOST infrastructure.
+- **No Fabricated Confidence**: All trajectory statistics (mean, std, 95% prediction intervals $P_{2.5}$ to $P_{97.5}$) are calculated directly from ensemble member realizations.
+- **Harvest Yield Forecast**: Returns expected final yield (`TWSO` at harvest) with std, 95% prediction interval, and min/max bounds across members.
+- **Uncertainty Metrics**: Yield CV ($\sigma / \mu$), 95% PI width, and relative uncertainty percentage.
+- **Endpoint**: Mounted via `GET /assimilation/{simulation_id}/forecast`.
+
 ---
 
 ## 💻 5. Environment Execution Commands

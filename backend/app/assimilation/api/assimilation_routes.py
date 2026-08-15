@@ -34,6 +34,8 @@ from backend.app.assimilation.schemas.assimilation_visualization import (
     YieldEvolutionPoint,
 )
 from backend.app.benchmarking.schemas import RunDiagnosticsSummary
+from backend.app.schemas.forecast import ForecastResponse
+from backend.app.services.forecast_service import ForecastService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -310,5 +312,40 @@ def get_assimilation_diagnostics(
 ) -> RunDiagnosticsSummary:
     from backend.app.api.routes.benchmark_routes import get_enkf_diagnostics
     return get_enkf_diagnostics(simulation_id, db)
+
+
+@router.get(
+    "/{simulation_id}/forecast",
+    response_model=ForecastResponse,
+    summary="Generate ensemble forward trajectory forecast",
+    description=(
+        "Generates forward ensemble trajectories from the latest EnKF assimilation state through "
+        "harvest date using the WOFOST EnsembleManager infrastructure. Returns daily mean trajectories, "
+        "ensemble standard deviation, 95% prediction intervals, harvest yield forecast, and uncertainty metrics."
+    ),
+    tags=["Assimilation"],
+)
+def get_assimilation_forecast(
+    simulation_id: uuid.UUID,
+    ensemble_size: int = 20,
+    db: Session = Depends(get_db),
+) -> ForecastResponse:
+    sim_run = db.query(SimulationRun).filter(SimulationRun.id == simulation_id).first()
+    if not sim_run:
+        raise HTTPException(
+            status_code=404,
+            detail=f"SimulationRun with ID {simulation_id} not found."
+        )
+
+    try:
+        service = ForecastService(db)
+        return service.generate_forecast(simulation_id=simulation_id, ensemble_size=ensemble_size)
+    except Exception as e:
+        logger.error("Forecast generation failed for simulation %s: %s", simulation_id, e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Forecast generation failed: {type(e).__name__}: {str(e)}"
+        )
+
 
 
