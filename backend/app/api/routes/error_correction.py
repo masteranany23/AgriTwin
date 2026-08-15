@@ -21,37 +21,25 @@ router = APIRouter()
 @router.post(
     "/error-correction/correct-window",
     response_model=ErrorCorrectionResponse,
-    summary="Correct WOFOST outputs using satellite data",
-    description="Applies adaptive Kalman Gain correction to 7-day windows"
+    summary="[DEPRECATED] Diagnostic window residual analysis",
+    description=(
+        "DEPRECATED: Evaluates diagnostic residuals between WOFOST outputs and QC-filtered "
+        "observations. Does NOT mutate DailyOutput in the database. "
+        "The canonical state-estimation path is: observations → QC → fusion → EnKF → assimilated WOFOST."
+    ),
+    deprecated=True,
 )
 async def correct_window(
     request: ErrorCorrectionRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Corrects anomalies in a 7-day window using adaptive Kalman Gain.
+    Diagnostic residual calculation endpoint (Deprecated for direct state mutation).
     
-    **Research Features Implemented:**
-    - STEP 1: Adaptive Kalman Gain based on observation uncertainty
-    - STEP 2: Joint LAI + Soil Moisture assimilation
-    - Works with interpolated satellite LAI and ERA5-Land SM
-    
-    **Process:**
-    1. Fetches WOFOST outputs (LAI, SM, DVS, TAGP)
-    2. Retrieves interpolated satellite observations (LAI & SM)
-    3. Computes Kalman Gain: K = Model_Error² / (Model_Error² + Obs_Error²)
-    4. Applies correction: x_new = x_old + K * (observation - x_old)
-    5. Updates DailyOutput table with corrected values
-    
-    **Observation Uncertainty:**
-    - FARMER_PHOTO: 30% uncertainty (R=0.3) → Lower gain, trust model more
-    - SENTINEL_2: 10% uncertainty (R=0.1) → Higher gain, trust satellite more
-    - MODIS: 20% uncertainty (R=0.2) → Moderate gain
-    
-    **Returns:**
-    - Correction summary for each day
-    - Anomaly detection count
-    - Blending weights (Kalman Gains) applied
+    **Canonical Architecture Note:**
+    State estimation must proceed through the sequential EnKF pipeline via `POST /assimilation/run-season`.
+    This endpoint evaluates diagnostic residuals and recommended Kalman gains for auditability,
+    passing observations through QualityControlService without altering DailyOutput database rows.
     """
     try:
         service = ErrorCorrectionService(db)

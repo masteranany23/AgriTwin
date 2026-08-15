@@ -211,6 +211,22 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
 - **QC Integration**: Invokes `QualityControlService` on registered observations to assign initial lifecycle status (`VALID`, `OUTLIER`, `REJECTED`, `MISSING`).
 - **Facade Endpoint**: Mounted at `POST /observations/register`.
 
+### K. Deprecation of Secondary State Mutation (`ErrorCorrectionService`)
+- **Canonical Architecture**: The single canonical state-estimation path is: `observations → QC → fusion → EnKF → assimilated WOFOST`.
+- **No Direct DailyOutput Mutation**: `ErrorCorrectionService` (`backend/app/services/error_correction_service.py`) does NOT mutate `DailyOutput` records in the database.
+- **QC & Diagnostic Delegate**: `POST /error-correction/correct-window` is marked `deprecated=True`. It passes observations through `QualityControlService` and computes diagnostic residual metrics and recommended gains for backward compatibility, leaving database rows completely unchanged.
+
+### L. FeatureEngine Architecture (`features/`)
+`FeatureEngine` (`backend/app/features/feature_engine.py`) extracts leakage-safe tabular feature vectors (`FeatureVector`) at any target forecast/assimilation timestamp `as_of_date`:
+- **Temporal Leakage Safety**: Filters out all daily outputs, observations, weather, and EnKF assimilation states with dates $> \text{as\_of\_date}$.
+- **Feature Categories**:
+  - `growth_rates`: $\Delta \text{LAI} / \Delta t$ and $\Delta \text{TAGP} / \Delta t$ over 1d and 7d windows.
+  - `water_stress`: Accumulated $1.0 - \text{RFTRA}$ transpiration deficit days, recent 7d/14d RFTRA means, and volumetric soil moisture deficit.
+  - `thermal_stress`: Heat stress days ($T_{\max} > 35^\circ\text{C}$), cold stress days ($T_{\min} < 5^\circ\text{C}$), and diurnal temperature range metrics.
+  - `assimilation_diagnostics`: Cycle counts, mean innovations, latest cycle innovations, prior/posterior ensemble spread, and state update magnitudes.
+  - `observation_quality`: Total/valid/rejected observation counts, mean quality score, sources present, and observation age (days since last valid observation).
+- **Tabular Flat Output**: Provides `feature_flat_dict` containing flattened numerical key-value pairs suitable for downstream modeling or analytical queries.
+
 ---
 
 ## 💻 5. Environment Execution Commands

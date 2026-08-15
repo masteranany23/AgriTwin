@@ -173,16 +173,23 @@ flowchart TD
   - Delegates pre-assimilation filtering to `QualityControlService` for physical bounds, quality scores, satellite cloud cover, and forecast Z-score outlier gating.
   - Dynamically routes valid observations through `ConfidenceEstimator` and `MultiSourceFusionService` to generate dynamic observation error covariance ($R$) matrices and inverse-variance fused observation vectors ($y$).
   - Logs step-by-step priors, posteriors, innovations, dynamic $R$ variances, and fusion diagnostics metadata into `AssimilationState`.
+- **Canonical State Estimation & Deprecation of Secondary Mutation**:
+  - The canonical state-estimation path is strictly enforced as: `observations → QC → fusion → EnKF → assimilated WOFOST`.
+  - Direct database mutation of `DailyOutput` records in `ErrorCorrectionService` is deprecated and removed. `POST /error-correction/correct-window` now delegates observation validation to `QualityControlService` and returns diagnostic residual metrics without modifying `DailyOutput`.
 - **Diagnostics & Visualization (`assimilation/services/assimilation_visualization_service.py`)**:
   - *History*: Complete audit trail of cycle updates.
   - *Timeseries*: Zero-Order Hold (ZOH) offset propagated prediction curves comparing open-loop vs EnKF.
   - *Yield Evolution*: Sequential yield convergence (`TWSO`) tracking across assimilation dates.
 
-### 6. Deterministic Scenario Sweeper Engine (`scenario/`)
-- **Sowing Date Generator**: Evaluates weekly sowing date shifts around a baseline date to find optimal thermal windows.
-- **Variety Generator**: Evaluates alternative crop parameter sets (e.g. Rice IR64 vs alternative varieties).
-- **Irrigation Generator**: Evaluates deficit, calendar-timed, or phenological stage-triggered irrigation schedules.
-- **Comparison Engine (`scenario/services/comparison_engine.py`)**: Ranks strategies based on total yield (`TWSO` kg/ha) and Water Use Efficiency ($\text{WUE} = \frac{\text{TWSO}}{\text{Irrigation} + \text{Precipitation}}$ kg/ha/mm).
+### 7. Leakage-Safe Feature Engine (`features/`)
+- **Leakage-Safe Feature Engine (`features/feature_engine.py`)**:
+  - Extracts tabular feature vectors (`FeatureVector`) at forecast/assimilation timestamps (`as_of_date`).
+  - Computes canopy and biomass growth rates: $\Delta \text{LAI} / \Delta t$ and $\Delta \text{TAGP} / \Delta t$ over 1-day and 7-day windows.
+  - Computes cumulative water-stress indicators: accumulated transpiration deficit $\sum (1 - \text{RFTRA})$, recent window averages, and soil moisture deficit.
+  - Computes thermal-stress indicators: heat stress days ($T_{\max} > 35^\circ\text{C}$), cold stress days ($T_{\min} < 5^\circ\text{C}$), and diurnal temperature range metrics.
+  - Computes EnKF innovation statistics (mean innovation, latest innovation per variable) and ensemble prior/posterior spread.
+  - Computes observation quality indicators (valid/rejected counts, mean quality score, sources present) and observation age relative to `as_of_date`.
+  - Guarantees strict temporal leakage safety by filtering out all records with timestamp $> \text{as\_of\_date}$.
 
 ---
 
@@ -321,6 +328,9 @@ AgriTwin/
 │       │   ├── providers/               # Sentinel-2 provider & SCL cloud masking
 │       │   ├── schemas/                 # Satellite scene schemas
 │       │   └── services/                # LAI observation calculation service
+│       ├── features/                    # Leakage-Safe Feature Engine
+│       │   ├── feature_engine.py        # Tabular feature extraction engine (ΔLAI/Δt, ΔTAGP/Δt, stress, innovation, obs quality)
+│       │   └── schemas.py               # FeatureVector & category Pydantic schemas
 │       ├── scenario/                    # Deterministic Scenario Sweeper Subsystem
 │       │   ├── api/                     # POST /scenarios endpoints
 │       │   ├── generators/              # Sowing date, variety, & irrigation generators
@@ -337,7 +347,7 @@ AgriTwin/
 │       │   ├── confidence_estimator.py   # Observation error matrix R generator
 │       │   ├── multi_source_fusion_service.py # Bayesian multi-source fusion engine
 │       │   ├── data_fusion_pipeline.py  # End-to-end Module 3.3 fusion pipeline
-│       │   └── error_correction_service.py # Residual error correction service
+│       │   └── error_correction_service.py # Diagnostic residual service (Deprecated direct DB mutation)
 │       ├── simulation/                  # PCSE WOFOST Engine Adapters
 │       │   ├── engine.py                # WOFOST 7.2 execution runner
 │       │   ├── agromanagement.py        # Agromanagement parser & rice DVSI fix

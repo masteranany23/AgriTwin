@@ -84,6 +84,7 @@ from backend.app.assimilation.api.assimilation_routes import router as assimilat
 from backend.app.satellite.api.routes import router as satellite_router
 from backend.app.api.routes.fusion import router as fusion_router
 from backend.app.api.routes.benchmark_routes import router as benchmark_router
+from backend.app.api.routes.error_correction import router as error_correction_router
 from backend.app.db.session import create_tables
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -254,6 +255,11 @@ app.include_router(
     benchmark_router,
     prefix="/benchmark",
     tags=["Benchmarking"],
+)
+
+app.include_router(
+    error_correction_router,
+    tags=["Error Correction (Deprecated)"],
 )
 
 
