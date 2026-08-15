@@ -243,6 +243,18 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
 - **`NoResidualModel` Implementation**: Default identity fallback used when no validated ML model artifact exists. Guarantees `is_available() == False`, `predict_residual() == 0.0`, and returns the assimilated WOFOST prediction unchanged ($y_{\text{corrected}} = y_{\text{assimilated}}$).
 - **`ResidualModelRegistry`**: Manages resolution of crop/region-specific models with automatic fallback to `NoResidualModel`.
 
+### O. Crop Model Configuration Registry (`crops/`)
+`CropRegistry` (`backend/app/crops/`) centralizes crop-specific model parameters, phenology rules, observation mappings, calibration, and residual model linkage metadata:
+- **Zero WOFOST Engine Rewriting**: Interoperates directly with `create_crop_provider()` and `build_agromanagement()`.
+- **`CropConfig` Structure**:
+  - `wofost`: Default variety name, YAML filename, $TSUM1$, $TSUM2$, $SPAN$, $SLATB$, $TDWI$.
+  - `phenology`: Start/end types (`crop_start_type="emergence"` for transplanted crops like rice), DVS landmark stages.
+  - `observation_mappings`: Conversion factors and observation error standard deviations ($\sigma$) for sensor/satellite variables.
+  - `calibration`: Calibration status (`BASELINE`, `CALIBRATED`), region, and EnKF state perturbation variances.
+  - `residual_model`: Associated `residual_model_id` and supported model lists.
+- **Auto-Discovery**: Dynamically builds `CropConfig` instances for any crop available in WOFOST parameter files.
+- **Numerical Identity**: Preserves 100% exact numerical identity with legacy simulation execution.
+
 ---
 
 ## 💻 5. Environment Execution Commands

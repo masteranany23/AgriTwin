@@ -201,7 +201,12 @@ flowchart TD
   - Provides the abstract `ResidualModel` interface enforcing methods for availability checks (`is_available()`), applicability checks (`is_applicable()`), residual prediction (`predict_residual()`), uncertainty estimation (`predict_uncertainty()`), and yield correction application (`apply_correction()`).
   - Includes `NoResidualModel` default identity fallback: when no validated ML model artifact exists, `is_available()` returns `False` and returns the assimilated WOFOST prediction unchanged with zero residual correction.
   - Includes `ResidualModelRegistry` for managing and resolving crop/region-specific residual models.
-  - Strictly guarantees zero fabricated corrections when no validated model is present.
+### 10. Crop Model Configuration Registry (`crops/`)
+- **Crop Configuration & Registry (`crops/registry.py`, `defaults.py`, `schemas.py`)**:
+  - Centralized `CropRegistry` and `CropConfig` schema capturing crop-specific parameters without modifying or rewriting the underlying WOFOST 7.2 simulation engine.
+  - Encapsulates WOFOST parameter defaults (default variety, YAML filename, $TSUM1$, $TSUM2$, $SPAN$, $SLATB$), phenology rules (`crop_start_type`, `crop_end_type`, DVS landmarks), sensor-to-WOFOST observation mappings, calibration metadata, and residual-model linkages.
+  - Auto-discovery mechanism for secondary crops available in WOFOST parameter files (`sunflower`, `cassava`, `cotton`, `barley`, `potato`, `soybean`, etc.).
+  - Preserves 100% numerical identity with legacy WOFOST execution pathways.
 
 ---
 
@@ -343,6 +348,10 @@ AgriTwin/
 │       ├── features/                    # Leakage-Safe Feature Engine
 │       │   ├── feature_engine.py        # Tabular feature extraction engine (ΔLAI/Δt, ΔTAGP/Δt, stress, innovation, obs quality)
 │       │   └── schemas.py               # FeatureVector & category Pydantic schemas
+│       ├── crops/                       # Crop Model Configuration & Registry
+│       │   ├── defaults.py              # Default CropConfig definitions (wheat, rice, maize, etc.)
+│       │   ├── registry.py              # CropRegistry manager & auto-discovery engine
+│       │   └── schemas.py               # CropConfig, Phenology, Observation & Calibration schemas
 │       ├── residual/                    # Residual Yield Model Abstraction
 │       │   ├── base.py                  # ResidualModel ABC interface
 │       │   ├── no_residual.py           # NoResidualModel default identity fallback
