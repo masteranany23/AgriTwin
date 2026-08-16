@@ -43,6 +43,7 @@ from backend.app.assimilation.models.assimilation_state import AssimilationState
 from backend.app.assimilation.models.observation import Observation, ObservationSource, ObservationStatus
 from backend.app.assimilation.repositories.assimilation_state_repository import AssimilationStateRepository
 from backend.app.assimilation.repositories.observation_repository import ObservationRepository
+from backend.app.assimilation.covariance.observation_covariance import ObservationCovariance
 from backend.app.assimilation.state.state_vector import STATE_VARIABLES, STATE_INDEX, STATE_DIM, StateVector
 from backend.app.assimilation.updater.state_updater import StateUpdater, InjectionResult
 from backend.app.models.assimilation_run import AssimilationRun
@@ -510,6 +511,7 @@ class AssimilationService:
         observations: list[Observation],
         field_id: Optional[uuid.UUID] = None,
         obs_date: Optional[datetime.date] = None,
+        explicit_R: Optional[np.ndarray] = None,
     ) -> tuple[np.ndarray, np.ndarray, int, dict]:
         """Aggregate & fuse observations into the EnKF y vector and dynamic R matrix.
 
@@ -517,9 +519,12 @@ class AssimilationService:
         MultiSourceFusionService to generate dynamic observation error covariance (R)
         and fused observation vector (y).
 
+        Supports optional explicit covariance matrix `explicit_R` supplied by a trusted
+        component, falling back safely to diagonal independence if invalid or omitted.
+
         Returns:
             y: fused observation vector shape (STATE_DIM,), NaN for unobserved vars
-            R: dynamic observation error covariance (STATE_DIM, STATE_DIM), diagonal
+            R: observation error covariance matrix (STATE_DIM, STATE_DIM)
             n_assimilated: number of distinct variables in y (non-NaN count)
             fusion_diagnostics: dictionary containing fusion metadata & dynamic R values
         """
@@ -633,8 +638,15 @@ class AssimilationService:
                 "confidence_scores": conf_scores,
             }
 
-        r_diag_safe = np.where(np.isnan(r_diag), 0.0, r_diag)
-        R = np.diag(r_diag_safe)
+        # Build R via ObservationCovariance abstraction
+        if explicit_R is not None:
+            obs_cov = ObservationCovariance.from_matrix(
+                explicit_R, fallback_variances=r_diag, expected_dim=STATE_DIM
+            )
+        else:
+            obs_cov = ObservationCovariance.from_variances(r_diag, dim=STATE_DIM)
+
+        R = obs_cov.matrix
         n_assimilated = int(np.sum(~np.isnan(y)))
 
         return y, R, n_assimilated, fusion_diagnostics

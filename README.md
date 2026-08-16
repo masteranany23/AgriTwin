@@ -171,7 +171,8 @@ flowchart TD
   - Updates soil water availability and root zone distribution.
 - **Quality Control, Dynamic Data Fusion & Persistence (`assimilation/services/assimilation_service.py`)**:
   - Delegates pre-assimilation filtering to `QualityControlService` for physical bounds, quality scores, satellite cloud cover, and forecast Z-score outlier gating.
-  - Dynamically routes valid observations through `ConfidenceEstimator` and `MultiSourceFusionService` to generate dynamic observation error covariance ($R$) matrices and inverse-variance fused observation vectors ($y$).
+  - Dynamically routes valid observations through `ConfidenceEstimator` and `MultiSourceFusionService` to generate fused observation vectors ($y$) and observation error covariance matrices ($R$) using `ObservationCovariance`.
+  - Enforces the **Diagonal Independence Assumption** by default (uncorrelated observations), with optional validation of full correlated matrices supplied by trusted fusion components. Off-diagonal terms are never invented out of thin air.
   - Logs step-by-step priors, posteriors, innovations, dynamic $R$ variances, and fusion diagnostics metadata into `AssimilationState`.
 - **Canonical State Estimation & Deprecation of Secondary Mutation**:
   - The canonical state-estimation path is strictly enforced as: `observations → QC → fusion → EnKF → assimilated WOFOST`.

@@ -179,7 +179,11 @@ The canonical observation vector construction in `AssimilationService._build_obs
 1. **Quality Control Filtering**: Raw observations are filtered using `QualityControlService` against physical bounds, quality score cutoffs, cloud thresholds, and Z-score outlier gates relative to ensemble forecasts.
 2. **Confidence Estimation**: Each valid observation undergoes dynamic confidence scoring via `ConfidenceEstimator.estimate_confidence()` based on sensor provider base reliability, observation age decay, spatial alignment, and cloud cover.
 3. **Multi-Source Bayesian Fusion**: When multiple observations exist for the same variable on a given date (e.g. Sentinel-2 LAI + Smartphone GRVI), `MultiSourceFusionService.fuse_observations()` applies inverse-variance weighting ($\frac{1}{\sigma^2}$) to compute a unified fused measurement value.
-4. **Dynamic $R$-Matrix Construction**: Computes the diagonal observation error covariance matrix $R = \text{diag}(\sigma_i^2)$ dynamically from confidence scores, preserving explicit observation uncertainty overrides when provided.
+4. **Observation Covariance Abstraction (`ObservationCovariance`)**:
+   - **Diagonal Independence Assumption (Default)**: By default, observation errors across distinct state variables or sensor streams are assumed independent. The observation error matrix $R$ is diagonal ($R = \text{diag}(\sigma_i^2)$).
+   - **Explicit Covariance Support**: Supports an explicit full matrix when supplied by a trusted component (e.g. multi-source data fusion or remote sensing retrieval model).
+   - **Strict Validation Rules**: Validates matrices for square dimensions, finiteness (no NaN/Inf), symmetry ($R = R^T$), and positive semi-definiteness ($\text{eig} \ge -1e-10$).
+   - **Zero Off-Diagonal Invention & Safe Fallback**: Off-diagonal covariance values are NEVER invented. Invalid explicit matrices are safely rejected with a warning and fall back to the diagonal variance structure.
 5. **Diagnostics & Auditability**: Stores complete fusion metadata, including sources used, individual confidence scores, and dynamic variances, directly inside the `fusion_diagnostics` property of `AssimilationCycleResult` and `AssimilationState`.
 
 ### H. Centralized QualityControlService Architecture
