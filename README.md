@@ -193,8 +193,14 @@ flowchart TD
 - **Forward Trajectory Forecast Engine (`ForecastService`)**:
   - Reuses existing WOFOST `EnsembleManager` infrastructure to generate forward trajectories from the latest EnKF assimilation state through `harvest_date`.
   - Computes daily mean trajectories, ensemble standard deviations ($\sigma$), and 95% prediction intervals ($P_{2.5}$ to $P_{97.5}$) for state variables (`LAI`, `SM`, `TAGP`, `TWSO`, `DVS`, `RFTRA`).
-  - Computes harvest yield forecast (`TWSO` at harvest date) with mean, standard deviation, 95% prediction interval, and min/max bounds.
-  - Computes statistical uncertainty metrics (yield Coefficient of Variation $\text{CV} = \sigma / \mu$, 95% prediction interval width, and relative uncertainty percentage).
+  - Reports extended forecast response fields for `GET /assimilation/{simulation_id}/forecast`:
+    - `open_loop_result`: Physical baseline unassimilated WOFOST simulation yield prediction.
+    - `assimilated_result`: EnKF assimilated ensemble mean yield forecast and 95% prediction interval.
+    - `hybrid_result`: Optional residual-corrected hybrid yield prediction, populated **only when a validated residual model exists**. Null fallback when `NoResidualModel` is active. Never claims hybrid prediction without validation.
+    - `uncertainty`: Yield and trajectory statistical uncertainty metrics (Coefficient of Variation $\text{CV} = \sigma / \mu$, 95% PI width, and relative uncertainty %).
+    - `observation_summary`: Active observation sources list, count of valid observations assimilated, and rejected observation counts.
+    - `forecast_mode`: Execution mode indicator (`"HYBRID_RESIDUAL"`, `"ASSIMILATED_ENSEMBLE"`, or `"OPEN_LOOP_BASELINE"`).
+    - `confidence_explanation`: Human-readable text narrative explaining uncertainty bounds, observation support, and residual model status.
 ### 9. Residual Yield Model Abstraction (`residual/`)
 - **Residual Model Abstraction (`residual/base.py`, `no_residual.py`, `registry.py`)**:
   - Defines target residual $\text{residual\_target} = \text{observed\_yield} - \text{assimilated\_WOFOST\_yield}$.

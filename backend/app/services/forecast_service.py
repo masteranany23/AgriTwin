@@ -11,7 +11,8 @@ Guarantees:
 1. No Second Simulation Engine: Reuses existing `EnsembleManager` and `Wofost72_WLP_FD` members.
 2. No Fabricated Confidence: All standard deviations, percentiles, and 95% prediction intervals
    are derived strictly from actual ensemble member realizations.
-3. Traceable Diagnostics: Documents forecast horizon, assimilation state lineage, and ensemble statistics.
+3. Strict Residual Reporting: Never claims a hybrid ML prediction unless a validated residual model exists.
+4. Traceable Diagnostics: Documents forecast horizon, assimilation state lineage, observation counts, and ensemble statistics.
 """
 
 import datetime
@@ -23,12 +24,18 @@ from sqlalchemy.orm import Session
 
 from backend.app.assimilation.ensemble.ensemble_manager import EnsembleManager
 from backend.app.assimilation.models.assimilation_state import AssimilationState
+from backend.app.assimilation.models.observation import Observation
 from backend.app.models.assimilation_run import AssimilationRun
 from backend.app.models.field import Field
 from backend.app.models.simulation_run import SimulationRun
+from backend.app.residual.registry import global_residual_registry
 from backend.app.schemas.forecast import (
+    AssimilatedYieldResult,
     ForecastDiagnostics,
     ForecastResponse,
+    HybridYieldResult,
+    ObservationSummary,
+    OpenLoopYieldResult,
     UncertaintyMetrics,
     VariableDailyStats,
     YieldForecast,
@@ -57,7 +64,7 @@ class ForecastService:
             target_date: Optional explicit forecast cutoff date (defaults to sim_run.harvest_date).
 
         Returns:
-            ForecastResponse containing daily trajectory stats, yield forecast, and diagnostics.
+            ForecastResponse containing daily trajectory stats, yield forecasts, and diagnostics.
         """
         # 1. Fetch simulation run
         sim_run = self.db.query(SimulationRun).filter(SimulationRun.id == simulation_id).first()
@@ -101,7 +108,6 @@ class ForecastService:
                 latest_assim_date = latest_state.assimilation_time.date()
 
                 # Calculate accumulated state vector offset (posterior - prior) at latest cycle
-                # to initialize forecast trajectory from latest assimilated state
                 if latest_state.forecast_state_vector and latest_state.updated_state_vector:
                     for k, post_val in latest_state.updated_state_vector.items():
                         prior_val = latest_state.forecast_state_vector.get(k)
@@ -128,12 +134,10 @@ class ForecastService:
         manager.run_until(harvest_date)
 
         # 5. Extract daily output series from all ensemble members
-        # Key variables to track
         vars_of_interest = ["lai", "sm", "tagp", "twso", "dvs", "rftra"]
         member_outputs_by_date: Dict[datetime.date, Dict[str, List[float]]] = {}
 
         for member in manager.members:
-            # PCSE wofost.get_output() returns list of output dicts for all simulated days
             output_list = member.wofost.get_output()
             for row in output_list:
                 d = row.get("day")
@@ -148,7 +152,6 @@ class ForecastService:
                     if val is None:
                         val = row.get(v)
 
-                    # If state offset exists from assimilation state, apply offset adjustment
                     if val is not None and v in state_offsets:
                         val = max(0.0, val + state_offsets[v])
 
@@ -175,7 +178,6 @@ class ForecastService:
                 mean_val = float(np.nanmean(arr))
                 std_val = float(np.nanstd(arr, ddof=1)) if len(arr) > 1 else 0.0
 
-                # 95% Prediction Interval via empirical percentiles (statistically justified)
                 pi_lower = float(np.percentile(arr, 2.5))
                 pi_upper = float(np.percentile(arr, 97.5))
                 min_v = float(np.min(arr))
@@ -213,7 +215,70 @@ class ForecastService:
             max_yield_kg_ha=yield_stat.max_val,
         )
 
-        # 8. Uncertainty Metrics
+        # 8. Open-Loop and Assimilated Results
+        open_loop_mean = (
+            float(sim_run.yield_kg_ha)
+            if sim_run.yield_kg_ha is not None
+            else float(member_outputs_by_date[sorted_dates[-1]]["twso"][0])
+            if member_outputs_by_date.get(sorted_dates[-1], {}).get("twso")
+            else yield_stat.mean
+        )
+
+        open_loop_result = OpenLoopYieldResult(
+            mean_yield_kg_ha=open_loop_mean,
+            harvest_date=final_date,
+            description="Open-loop unassimilated WOFOST physical baseline simulation.",
+        )
+
+        assimilated_result = AssimilatedYieldResult(
+            mean_yield_kg_ha=yield_stat.mean,
+            std_yield_kg_ha=yield_stat.std,
+            pi_lower_95_kg_ha=yield_stat.pi_lower_95,
+            pi_upper_95_kg_ha=yield_stat.pi_upper_95,
+            harvest_date=final_date,
+            assimilated_cycles_count=assimilated_cycles_count,
+        )
+
+        # 9. Observation Summary
+        obs_query = self.db.query(Observation).filter(
+            (Observation.simulation_run_id == simulation_id) | (Observation.field_id == sim_run.field_id)
+        )
+        all_obs = obs_query.all()
+        sources = sorted(list({str(o.source.value if hasattr(o.source, "value") else o.source) for o in all_obs if o.source}))
+        obs_used = sum(1 for o in all_obs if str(o.status.value if hasattr(o.status, "value") else o.status) == "VALID")
+        obs_rejected = sum(1 for o in all_obs if str(o.status.value if hasattr(o.status, "value") else o.status) in ["REJECTED", "OUTLIER"])
+
+        observation_summary = ObservationSummary(
+            active_sources=sources,
+            observations_used=obs_used,
+            observations_rejected=obs_rejected,
+        )
+
+        # 10. Residual Model Resolution & Hybrid Result
+        crop_name = sim_run.crop
+        region_name = getattr(sim_run, "region", None)
+        res_model = global_residual_registry.get_model(crop=crop_name, region=region_name)
+
+        is_validated = res_model.is_available(crop=crop_name, region=region_name) and getattr(res_model.metadata, "validated", False)
+
+        hybrid_result: Optional[HybridYieldResult] = None
+        if is_validated:
+            pred = res_model.apply_correction(assimilated_yield=yield_stat.mean, crop=crop_name, region=region_name)
+            hybrid_result = HybridYieldResult(
+                model_id=res_model.metadata.model_id,
+                model_version=res_model.metadata.version,
+                assimilated_yield_kg_ha=yield_stat.mean,
+                residual_correction_kg_ha=pred.residual_correction_kg_ha,
+                corrected_yield_kg_ha=pred.corrected_yield_kg_ha,
+                residual_uncertainty_kg_ha=pred.residual_uncertainty_kg_ha,
+                is_validated=True,
+            )
+            forecast_mode = "HYBRID_RESIDUAL"
+        else:
+            hybrid_result = None
+            forecast_mode = "ASSIMILATED_ENSEMBLE" if assimilated_cycles_count > 0 else "OPEN_LOOP_BASELINE"
+
+        # 11. Uncertainty Metrics
         yield_cv = yield_stat.std / yield_stat.mean if yield_stat.mean > 1e-6 else 0.0
         pi_width = yield_stat.pi_upper_95 - yield_stat.pi_lower_95
         rel_uncertainty_pct = (pi_width / yield_stat.mean * 100.0) if yield_stat.mean > 1e-6 else 0.0
@@ -230,7 +295,7 @@ class ForecastService:
             mean_trajectory_cv=mean_cv_per_var,
         )
 
-        # 9. Execution Diagnostics
+        # 12. Execution Diagnostics & Confidence Explanation
         horizon_days = (harvest_date - forecast_start_date).days + 1
         diagnostics = ForecastDiagnostics(
             simulation_id=str(simulation_id),
@@ -244,9 +309,36 @@ class ForecastService:
             variety_name=sim_run.variety,
         )
 
+        if is_validated and hybrid_result:
+            confidence_explanation = (
+                f"Forecast generated using {ensemble_size} ensemble members over a {horizon_days}-day horizon "
+                f"with {assimilated_cycles_count} EnKF assimilation cycles. "
+                f"Observation support: {len(sources)} sources ({', '.join(sources) if sources else 'None'}), "
+                f"{obs_used} valid, {obs_rejected} rejected. "
+                f"Assimilated WOFOST yield is {yield_stat.mean:.0f} kg/ha (95% PI: [{yield_stat.pi_lower_95:.0f} - {yield_stat.pi_upper_95:.0f} kg/ha], CV: {yield_cv*100:.1f}%). "
+                f"Applied validated residual model '{hybrid_result.model_id}' (v{hybrid_result.model_version}) "
+                f"with a correction of {hybrid_result.residual_correction_kg_ha:+.0f} kg/ha, yielding a final hybrid prediction of {hybrid_result.corrected_yield_kg_ha:.0f} kg/ha."
+            )
+        else:
+            confidence_explanation = (
+                f"Forecast generated using {ensemble_size} ensemble members over a {horizon_days}-day horizon "
+                f"with {assimilated_cycles_count} EnKF assimilation cycles up to {latest_assim_date or 'sowing'}. "
+                f"Observation support: {len(sources)} sources ({', '.join(sources) if sources else 'None'}), "
+                f"{obs_used} valid, {obs_rejected} rejected. "
+                f"Assimilated WOFOST yield forecast is {yield_stat.mean:.0f} kg/ha with 95% PI [{yield_stat.pi_lower_95:.0f} - {yield_stat.pi_upper_95:.0f} kg/ha] (CV: {yield_cv*100:.1f}%). "
+                f"No validated ML residual model is active for this crop/region, so assimilated WOFOST prediction is returned directly without synthetic correction."
+            )
+
         return ForecastResponse(
             diagnostics=diagnostics,
             yield_forecast=yield_forecast,
             uncertainty_metrics=uncertainty_metrics,
             trajectories=trajectories,
+            open_loop_result=open_loop_result,
+            assimilated_result=assimilated_result,
+            hybrid_result=hybrid_result,
+            uncertainty=uncertainty_metrics,
+            observation_summary=observation_summary,
+            forecast_mode=forecast_mode,
+            confidence_explanation=confidence_explanation,
         )

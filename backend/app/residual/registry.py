@@ -43,6 +43,11 @@ class ResidualModelRegistry:
             del self._models[model_id]
             logger.info(f"Unregistered ResidualModel: {model_id}")
 
+    def reset(self) -> None:
+        """Reset registry to default state containing only NoResidualModel."""
+        self._models = {}
+        self.register_model(self._default_fallback)
+
     def get_model(self, crop: str, region: Optional[str] = None) -> ResidualModel:
         """Retrieve the best validated residual model for the given crop and region.
 

@@ -5,12 +5,15 @@ tests/test_forecast_service.py
 Unit and API integration tests for AgriTwin ForecastService:
 - Trajectory length verification
 - Mean, std, and 95% prediction interval bounds validation
-- Harvest yield forecast and uncertainty metrics
+- Extended response reporting: open-loop, assimilated, hybrid, uncertainty, observations, mode, explanation
+- Fallback behavior when no validated residual model exists (never claims hybrid prediction)
+- Hybrid result reporting when a validated residual model is active
 - GET /assimilation/{simulation_id}/forecast endpoint
 """
 
 import datetime
 import uuid
+from typing import Optional
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -18,7 +21,55 @@ from sqlalchemy.orm import Session
 from backend.app.models.farm import Farm
 from backend.app.models.field import Field
 from backend.app.models.simulation_run import SimulationRun
+from backend.app.residual.base import ResidualModel
+from backend.app.residual.registry import global_residual_registry
+from backend.app.residual.schemas import CorrectedYieldPrediction, ModelMetadata, ResidualPrediction
 from backend.app.services.forecast_service import ForecastService
+
+
+class DummyValidatedResidualModel(ResidualModel):
+    """Mock validated residual model for testing hybrid forecast response."""
+
+    @property
+    def metadata(self) -> ModelMetadata:
+        return ModelMetadata(
+            model_id="wheat_validated_v1",
+            name="Wheat Validated Bias Correction",
+            version="1.0.0",
+            description="Validated bias correction model",
+            validated=True,
+            supported_crops=["wheat"],
+            supported_regions=["GLOBAL"],
+        )
+
+    def is_applicable(self, crop: str, region: Optional[str] = None) -> bool:
+        return crop.lower() == "wheat"
+
+    def is_available(self, crop: str, region: Optional[str] = None) -> bool:
+        return self.is_applicable(crop, region)
+
+    def predict_residual(self, crop: str, region: Optional[str] = None, **kwargs) -> ResidualPrediction:
+        return ResidualPrediction(
+            residual_correction_kg_ha=350.0,
+            residual_uncertainty_kg_ha=50.0,
+            is_validated_correction=True,
+            model_id="wheat_validated_v1",
+            model_version="1.0.0",
+        )
+
+    def predict_uncertainty(self, crop: str, region: Optional[str] = None, **kwargs) -> float:
+        return 50.0
+
+    def apply_correction(self, assimilated_yield: float, crop: str, region: Optional[str] = None, **kwargs) -> CorrectedYieldPrediction:
+        return CorrectedYieldPrediction(
+            assimilated_yield_kg_ha=assimilated_yield,
+            residual_correction_kg_ha=350.0,
+            corrected_yield_kg_ha=assimilated_yield + 350.0,
+            residual_uncertainty_kg_ha=50.0,
+            is_validated_correction=True,
+            model_id="wheat_validated_v1",
+            model_version="1.0.0",
+        )
 
 
 @pytest.fixture
@@ -54,6 +105,7 @@ def test_setup(test_engine):
             status="COMPLETED",
             run_type="irrigated",
             use_real_weather=False,
+            yield_kg_ha=4500.0,
         )
         db.add(sim_run)
         db.commit()
@@ -108,6 +160,43 @@ def test_forecast_service_trajectory_length_mean_std_bounds(test_engine, test_se
         assert um.yield_cv >= 0.0
         assert um.yield_pi_width_kg_ha == pytest.approx(yf.pi_upper_95_kg_ha - yf.pi_lower_95_kg_ha)
 
+        # 5. Check Extended Forecast Response Fields (Fallback / Default NoResidualModel mode)
+        assert response.open_loop_result.mean_yield_kg_ha == 4500.0
+        assert response.assimilated_result.mean_yield_kg_ha == pytest.approx(yf.mean_yield_kg_ha)
+        
+        # CRITICAL SAFETY REQUIREMENT: Must be None when no validated residual model exists
+        assert response.hybrid_result is None
+        assert response.forecast_mode in ["ASSIMILATED_ENSEMBLE", "OPEN_LOOP_BASELINE"]
+        assert "No validated ML residual model is active" in response.confidence_explanation
+        assert isinstance(response.observation_summary.active_sources, list)
+
+
+def test_forecast_service_with_validated_residual_model(test_engine, test_setup):
+    """Verify hybrid_result is populated when a validated residual model is registered."""
+    sim_id = test_setup["sim_id"]
+    dummy_model = DummyValidatedResidualModel()
+
+    # Register validated model in global registry
+    global_residual_registry.register_model(dummy_model)
+
+    try:
+        with Session(test_engine) as db:
+            sim_run = db.query(SimulationRun).filter(SimulationRun.id == sim_id).first()
+            service = ForecastService(db)
+
+            response = service.generate_forecast(simulation_id=sim_run.id, ensemble_size=5)
+
+            assert response.hybrid_result is not None
+            assert response.hybrid_result.model_id == "wheat_validated_v1"
+            assert response.hybrid_result.residual_correction_kg_ha == 350.0
+            assert response.hybrid_result.corrected_yield_kg_ha == response.assimilated_result.mean_yield_kg_ha + 350.0
+            assert response.forecast_mode == "HYBRID_RESIDUAL"
+            assert "Applied validated residual model 'wheat_validated_v1'" in response.confidence_explanation
+
+    finally:
+        # Restore default registry state
+        global_residual_registry.reset()
+
 
 def test_forecast_api_endpoint(client: TestClient, test_setup):
     """Test GET /assimilation/{simulation_id}/forecast endpoint via TestClient."""
@@ -121,6 +210,15 @@ def test_forecast_api_endpoint(client: TestClient, test_setup):
     assert "yield_forecast" in data
     assert "uncertainty_metrics" in data
     assert "trajectories" in data
+
+    # Extended response assertion
+    assert "open_loop_result" in data
+    assert "assimilated_result" in data
+    assert "hybrid_result" in data
+    assert data["hybrid_result"] is None
+    assert "observation_summary" in data
+    assert "forecast_mode" in data
+    assert "confidence_explanation" in data
 
     assert data["diagnostics"]["simulation_id"] == str(sim_id)
     assert data["diagnostics"]["ensemble_size"] == 5

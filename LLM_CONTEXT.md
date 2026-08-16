@@ -231,8 +231,14 @@ The `ObservationSource` enum (`backend/app/assimilation/models/observation.py`) 
 `ForecastService` (`backend/app/services/forecast_service.py`) generates forward trajectories from the latest EnKF assimilation state through harvest date:
 - **No Secondary Engine**: Reuses the core `EnsembleManager` WOFOST infrastructure.
 - **No Fabricated Confidence**: All trajectory statistics (mean, std, 95% prediction intervals $P_{2.5}$ to $P_{97.5}$) are calculated directly from ensemble member realizations.
-- **Harvest Yield Forecast**: Returns expected final yield (`TWSO` at harvest) with std, 95% prediction interval, and min/max bounds across members.
-- **Uncertainty Metrics**: Yield CV ($\sigma / \mu$), 95% PI width, and relative uncertainty percentage.
+- **Extended Response Schema (`ForecastResponse`)**:
+  - `open_loop_result`: Baseline physical WOFOST prediction prior to/without EnKF state updates.
+  - `assimilated_result`: EnKF assimilated ensemble mean yield forecast and 95% prediction interval.
+  - `hybrid_result`: Optional residual-corrected hybrid yield result, populated **only when a validated residual model exists**. Returns `None` when `NoResidualModel` is active. Never claims a hybrid ML prediction without explicit validation.
+  - `uncertainty`: Yield CV ($\sigma / \mu$), 95% PI width, and relative uncertainty percentage.
+  - `observation_summary`: Active observation sources list, valid assimilated counts, and rejected quality control counts.
+  - `forecast_mode`: `"HYBRID_RESIDUAL"`, `"ASSIMILATED_ENSEMBLE"`, or `"OPEN_LOOP_BASELINE"`.
+  - `confidence_explanation`: Human-readable text narrative explaining uncertainty bounds, observation support, and residual model status.
 - **Endpoint**: Mounted via `GET /assimilation/{simulation_id}/forecast`.
 
 ### N. Residual Model Abstraction (`residual/`)
