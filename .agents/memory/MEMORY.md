@@ -1,0 +1,1 @@
+- [Python-only migration](python-only-migration.md) — generic pnpm migration scripts do not port Python backends; preserve the source separately and avoid rewriting scientific code.

@@ -1,10 +1,11 @@
-# [Project name]
+# AgriTwin
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+AgriTwin is a physics-based agricultural digital-twin platform that combines WOFOST/PCSE crop simulation, remote sensing observations, weather and soil data, and EnKF assimilation.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/agritwin-web run dev` — run the AgriTwin web artifact through its managed workflow
+- `python -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000` — run the preserved Python backend locally after installing `requirements.txt`
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -14,31 +15,38 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Web: React + Vite, Tailwind CSS, Recharts
+- Existing scientific backend: Python, FastAPI, SQLAlchemy, PCSE/WOFOST
+- Existing database layer: PostgreSQL/SQLite configuration with Alembic migrations
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `backend/app/` — preserved FastAPI application and scientific modules
+- `alembic/` — preserved database migrations
+- `tests/` — preserved backend test suite
+- `artifacts/agritwin-web/` — React web artifact
+- `artifacts/api-server/` — workspace API scaffold; the Python backend remains the source of truth for AgriTwin scientific behavior
+- `attached_assets/` — uploaded design brief and reference assets
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The existing Python backend is frozen and remains the source of truth for simulation and assimilation behavior.
+- The AgriTwin web artifact is separate from the backend so the frontend can evolve without changing scientific code.
+- The v0.1 web experience uses deterministic local demonstration data until a later task wires it to the backend APIs.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The product demonstrates crop simulation, field observations, state assimilation, and forecast trajectories for agricultural researchers and institutional stakeholders.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the existing backend scientific implementation and tests unchanged.
+- Prefer small, focused changes over restructuring the scientific stack.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The original backend uses Python dependencies from `requirements.txt`; the generated Node workspace API scaffold is not a replacement for it.
+- Do not run `pnpm dev` at the workspace root; use the configured artifact workflows.
 
 ## Pointers
 

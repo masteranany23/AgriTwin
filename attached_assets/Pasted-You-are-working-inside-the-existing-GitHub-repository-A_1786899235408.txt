@@ -1,0 +1,443 @@
+You are working inside the existing GitHub repository:
+
+AgriTwin
+
+This repository contains an existing scientifically audited agricultural
+digital-twin backend.
+
+IMPORTANT SAFETY RULE:
+
+DO NOT modify, rewrite, refactor, delete, rename, or "improve" the existing
+backend scientific implementation.
+
+DO NOT modify the existing backend tests.
+
+DO NOT change scientific calculations.
+
+DO NOT change assimilation logic.
+
+DO NOT change API behavior.
+
+The existing backend has already passed 379 tests and has undergone scientific
+audits including:
+
+- zero-observation invariant
+- dynamic R test
+- EnKF numerical stability test
+- soil-moisture trace
+- full pytest verification
+
+Treat the existing backend as frozen.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Build the AgriTwin v0.1 frontend directly inside this repository.
+
+The frontend should live in:
+
+frontend/
+
+Do not create a separate repository.
+
+Do not replace the existing backend.
+
+The goal is to reproduce the attached Stitch design as faithfully as
+reasonably possible while creating clean, maintainable React/TypeScript
+code that can grow into the future AgriTwin platform.
+
+The attached Stitch screenshot is the PRIMARY VISUAL REFERENCE.
+
+Also read:
+
+docs/AGRITWIN_UI_V0_1_DESIGN.md
+
+That document defines the design requirements.
+
+==================================================
+FIRST: INSPECT THE REPOSITORY
+==================================================
+
+Before making changes:
+
+1. Inspect the existing repository structure.
+2. Identify the backend entry points.
+3. Identify existing API routes.
+4. Identify existing visualization/assimilation schemas.
+5. Identify whether a frontend already exists.
+6. Identify the existing Python environment and test setup.
+7. Do not modify any of the above.
+
+If a frontend does not exist, create:
+
+frontend/
+
+==================================================
+FRONTEND STACK
+==================================================
+
+Use:
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Recharts
+- Motion/Framer Motion where appropriate
+
+Keep dependencies reasonable.
+
+Do not introduce a large UI framework unnecessarily.
+
+==================================================
+DESIGN
+==================================================
+
+Reproduce the attached Stitch design.
+
+The visual language must remain:
+
+- professional
+- scientific
+- clean
+- calm
+- modern
+- agricultural
+- trustworthy
+- premium but restrained
+
+Use:
+
+- warm off-white background
+- white surfaces
+- deep forest green
+- muted sage
+- subtle earth tones
+- dark charcoal text
+- generous whitespace
+- subtle borders
+- restrained shadows
+
+Avoid:
+
+- excessive green
+- neon colours
+- excessive gradients
+- glassmorphism
+- generic SaaS dashboard styling
+- cartoon farming graphics
+- excessive cards
+- visual clutter
+
+==================================================
+PAGE
+==================================================
+
+Create a polished single-page AgriTwin v0.1 website.
+
+Sections:
+
+1. Navigation
+2. Hero
+3. Field Digital Twin
+4. Field Status
+5. State Assimilation
+6. Assimilation Trajectory
+7. Footer
+
+==================================================
+HERO
+==================================================
+
+Headline:
+
+A Digital Twin for Every Field.
+
+Supporting text:
+
+AgriTwin combines physics-based crop simulation, real-world observations
+and sequential data assimilation to understand field conditions and
+forecast what happens next.
+
+Buttons:
+
+Explore the Digital Twin
+How It Works
+
+Keep the hero composition close to the Stitch reference.
+
+==================================================
+FIELD DIGITAL TWIN
+==================================================
+
+This is the visual centerpiece.
+
+Create a reusable React component.
+
+Initially implement the field using SVG/CSS or lightweight React rendering.
+
+DO NOT introduce Three.js/WebGL in v0.1.
+
+The field should visually contain:
+
+- rectangular field boundary
+- organized crop rows
+- individual plants
+- varying plant density
+- subtle crop-condition variation
+- observation markers
+- field/satellite observation indicators
+- subtle spatial depth
+
+The field should immediately look like a digital representation of a real
+agricultural field.
+
+Implement three deterministic visual states:
+
+CURRENT STATE
+ASSIMILATED
+FORECAST
+
+The selector should work locally.
+
+It does not need backend integration yet.
+
+==================================================
+DEMO DATA
+==================================================
+
+Use deterministic local demonstration data.
+
+Field:
+
+Demonstration Field
+
+Crop:
+
+Wheat
+
+Simulation Day:
+
+42
+
+CURRENT STATE:
+
+LAI: 2.84
+Soil Moisture: 31%
+Biomass: 4.21 t/ha
+DVS: 0.74
+
+OBSERVATION:
+
+Source: Sentinel-2
+Observed LAI: 2.61
+Confidence: 91%
+
+ASSIMILATED STATE:
+
+LAI: 2.67
+
+FORECAST:
+
+LAI: 3.42
+Projected Yield: 4.80 t/ha
+Forecast Confidence: 87%
+
+Clearly treat these as illustrative demonstration values.
+
+Do not imply that these are live field measurements.
+
+==================================================
+FIELD STATUS
+==================================================
+
+Create four reusable metric cards:
+
+Leaf Area Index
+Soil Moisture
+Total Biomass
+Development Stage
+
+Use the Stitch design as the visual reference.
+
+==================================================
+STATE ASSIMILATION
+==================================================
+
+Create a connected six-step process:
+
+01 Current Field
+02 Observation
+03 Data Fusion
+04 EnKF Process
+05 Updated Twin
+06 Future Forecast
+
+Use a continuous subtle line between the steps.
+
+Make the active step visually clear.
+
+The sequence should communicate:
+
+MODEL
+→ OBSERVATION
+→ ASSIMILATION
+→ UPDATED MODEL
+→ FORECAST
+
+==================================================
+ASSIMILATION TRAJECTORY
+==================================================
+
+Create the chart shown in the Stitch reference.
+
+Show:
+
+- Open-loop simulation
+- Assimilated simulation
+- Observations
+
+Use Recharts.
+
+Keep it clean and scientific.
+
+Use deterministic demo data.
+
+==================================================
+ANIMATION
+==================================================
+
+Use subtle purposeful animations:
+
+- section reveal
+- field state transition
+- metric transitions where appropriate
+- assimilation step highlighting
+- chart appearance
+- subtle card hover
+
+Do NOT over-animate.
+
+No excessive parallax.
+No bouncing.
+No particle effects.
+
+==================================================
+ARCHITECTURE
+==================================================
+
+Use reusable components.
+
+Suggested structure:
+
+frontend/
+  src/
+    components/
+      layout/
+      hero/
+      field/
+      metrics/
+      assimilation/
+      charts/
+    data/
+      demo/
+    types/
+    services/
+    adapters/
+    hooks/
+    pages/
+
+Separate:
+
+demo data
+→ data adapter
+→ UI components
+
+The components must eventually accept real backend data without requiring
+a rewrite.
+
+Do not duplicate backend scientific calculations in the frontend.
+
+==================================================
+BACKEND INTEGRATION
+==================================================
+
+For v0.1, DO NOT connect the real backend yet.
+
+Use local deterministic demo data.
+
+However, inspect the existing backend APIs and schemas so that the frontend
+architecture is compatible with them later.
+
+Do not change backend code to make the frontend easier.
+
+==================================================
+RESPONSIVENESS
+==================================================
+
+Desktop:
+
+- large field visualization
+- spacious layout
+- horizontal assimilation timeline
+
+Tablet:
+
+- reduced spacing
+- responsive field
+
+Mobile:
+
+- single column
+- stacked metrics
+- vertical/scrollable assimilation process if necessary
+- responsive chart
+- no horizontal page scrolling
+
+==================================================
+QUALITY
+==================================================
+
+The website must feel appropriate for demonstrating AgriTwin to:
+
+- government officials
+- agricultural researchers
+- institutional stakeholders
+
+It should feel like a serious scientific/climate-tech product.
+
+Do not add:
+
+- authentication
+- admin dashboard
+- farmer accounts
+- GIS platform
+- IoT management
+- chatbot
+- scenario optimization
+- alerts
+- payment systems
+- unrelated features
+
+==================================================
+GIT SAFETY
+==================================================
+
+Work only on the current frontend development branch.
+
+Do not modify main.
+
+Before finishing:
+
+1. Run the frontend build.
+2. Run frontend checks/lint if configured.
+3. Verify the page works.
+4. Verify responsive behavior.
+5. Verify the existing backend tests are still untouched.
+6. Show me a concise summary of files created/changed.
+
+Do not spend time polishing beyond the supplied Stitch design.
+
+The goal of this task is a working, faithful AgriTwin v0.1 frontend,
+not additional feature development.

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "AgriTwin"
+description = "A scientific agricultural digital-twin experience for exploring field simulation, observations, assimilation, and forecast data."
+version = "1.0.0"
+id = "artifacts/agritwin-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18662
+
+[services.development]
+run = "pnpm --filter @workspace/agritwin-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/agritwin-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/agritwin-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18662"
+BASE_PATH = "/"
