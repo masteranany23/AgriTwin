@@ -1,0 +1,245 @@
+The current implementation is functional and the overall visual quality is good.
+
+Now make ONE focused visual correction pass.
+
+IMPORTANT:
+Do not rebuild the application.
+Do not change the frontend architecture.
+Do not modify the backend.
+Do not modify backend tests.
+Do not add new features.
+
+The attached Stitch screenshot is the PRIMARY visual source of truth.
+
+The goal is to make the current implementation visually closer to the Stitch design rather than creating a new interpretation.
+
+========================================
+1. HERO — RETURN TO STITCH COMPOSITION
+========================================
+
+Change the hero to a simpler centered composition.
+
+The Stitch reference has:
+
+- centered eyebrow/intro
+- centered headline
+- centered supporting paragraph
+- two centered buttons
+- field visualization directly underneath
+
+Use:
+
+"A Digital Twin for Every Field."
+
+Keep the existing AgriTwin description.
+
+Remove the large right-side editorial block:
+
+"A RESEARCH INSTRUMENT FOR"
+"Crop researchers"
+"Climate programs"
+"Public institutions"
+"Field operations"
+
+Also remove:
+
+"Not a dashboard. A clear view of the state beneath the canopy."
+
+Do not invent replacement marketing copy.
+
+The hero should feel spacious but not empty.
+
+========================================
+2. FIELD — MAKE THIS THE MAIN VISUAL
+========================================
+
+The field visualization should visually resemble the Stitch reference more closely.
+
+Keep the existing field implementation, but improve its presentation.
+
+Requirements:
+
+- larger field visualization
+- stronger visual presence
+- clearer crop rows
+- more natural plant shapes
+- visible variation in crop density
+- subtle healthy/sparse regions
+- observation markers
+- satellite/observation indicators
+- clean field boundary
+- subtle depth/perspective
+
+Do NOT use photorealism.
+
+Do NOT introduce Three.js.
+
+The field should feel like a scientific digital representation of an agricultural field.
+
+Keep:
+
+CURRENT STATE
+ASSIMILATED
+FORECAST
+
+as a compact selector associated with the field.
+
+========================================
+3. FIELD STATUS
+========================================
+
+Bring this section visually closer to the Stitch design.
+
+The Stitch version has:
+
+Field Status
+Real-time state variables extracted from the assimilated simulation.
+
+Then four clean metrics.
+
+Use the four metrics:
+
+Leaf Area Index
+2.84
+
+Soil Moisture
+31%
+
+Total Biomass
+4.21 t/ha
+
+Development Stage
+DVS 0.74
+
+Keep the cards clean and restrained.
+
+Do not add additional metrics.
+
+========================================
+4. STATE ASSIMILATION
+========================================
+
+Keep the six-step process.
+
+Use exactly:
+
+01 Current Field
+02 Observation
+03 Data Fusion
+04 EnKF Process
+05 Updated Twin
+06 Future Forecast
+
+The steps should be visually connected.
+
+Do not add additional labels such as:
+
+MODEL
+OBSERVATION
+ASSIMILATION
+UPDATED MODEL
+
+unless they are extremely subtle.
+
+The Stitch design is simpler.
+
+Keep the EnKF terminology because this is scientifically important.
+
+========================================
+5. TRAJECTORY
+========================================
+
+Keep the current chart.
+
+It is good.
+
+Make the chart visually closer to the Stitch reference:
+
+- clean white surface
+- thin grid lines
+- open-loop line
+- assimilated line
+- orange observation points
+- restrained legend
+- generous whitespace
+
+Do not change the scientific meaning of the chart.
+
+========================================
+6. CONTENT
+========================================
+
+Remove invented marketing phrases.
+
+Avoid phrases such as:
+
+"The forecast remembers what the field said."
+
+"A research instrument for..."
+
+"Not a dashboard..."
+
+Use concise scientific language instead.
+
+The website should communicate what AgriTwin actually does.
+
+========================================
+7. OVERALL PAGE
+========================================
+
+The Stitch design should remain the visual reference.
+
+Target visual hierarchy:
+
+NAVIGATION
+
+        A Digital Twin for Every Field.
+        short scientific description
+        [Explore the Digital Twin] [How It Works]
+
+              FIELD VISUALIZATION
+
+                  FIELD STATUS
+
+              STATE ASSIMILATION
+
+             ASSIMILATION TRAJECTORY
+
+                    FOOTER
+
+The page should feel:
+
+simple
+scientific
+professional
+calm
+credible
+
+It should NOT feel like a generic SaaS landing page.
+
+========================================
+8. IMPORTANT
+========================================
+
+Do not make further conceptual/design changes.
+
+Do not add:
+- dashboards
+- extra sections
+- extra cards
+- authentication
+- maps
+- databases
+- chatbot
+- settings
+- additional marketing content
+
+This is the final visual refinement pass for AgriTwin v0.1.
+
+After making the changes:
+
+1. Run the frontend build.
+2. Verify the page works.
+3. Verify responsive layout.
+4. Confirm no backend files were modified.
+5. Report the files changed.

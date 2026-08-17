@@ -1,4 +1,4 @@
-import { Check, CircleDot, Database, Eye, FlaskConical, GitMerge, Sprout } from 'lucide-react';
+import { Check, Database, Eye, FlaskConical, GitMerge, Sprout } from 'lucide-react';
 import { assimilationSteps } from '@/data/demo';
 
 type AssimilationStepsProps = {
@@ -28,17 +28,12 @@ export function AssimilationSteps({ activeStep, onChange }: AssimilationStepsPro
                 <Icon size={17} strokeWidth={1.5} />
               </span>
               <span className="mt-3 block">
-                <span className="label-caps block text-[9px] opacity-80">{step.kicker}</span>
-                <span className="mt-1 block text-sm font-semibold">{step.id} {step.title}</span>
+                <span className="block text-sm font-semibold">{step.id} {step.title}</span>
                 <span className="mt-1 block text-[11px] text-[#7b837c]">{step.detail}</span>
               </span>
             </button>
           );
         })}
-      </div>
-      <div className="mt-8 flex items-center gap-2 text-[10px] text-[#7b837c]">
-        <CircleDot size={13} className="text-[#d97706]" />
-        <span>Step {String(activeStep + 1).padStart(2, '0')} active · select a stage to inspect the assimilation sequence</span>
       </div>
     </div>
   );

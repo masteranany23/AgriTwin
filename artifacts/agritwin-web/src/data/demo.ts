@@ -24,12 +24,12 @@ export const trajectoryData = [
 ];
 
 export const assimilationSteps = [
-  { id: '01', title: 'Current Field', kicker: 'MODEL', detail: 'Physics-based state' },
-  { id: '02', title: 'Observation', kicker: 'OBSERVATION', detail: 'Sentinel-2 signal' },
-  { id: '03', title: 'Data Fusion', kicker: 'ASSIMILATION', detail: 'Uncertainty-weighted' },
-  { id: '04', title: 'EnKF Process', kicker: 'ASSIMILATION', detail: 'Ensemble update' },
-  { id: '05', title: 'Updated Twin', kicker: 'UPDATED MODEL', detail: 'Best estimate' },
-  { id: '06', title: 'Future Forecast', kicker: 'FORECAST', detail: 'Projected trajectory' },
+  { id: '01', title: 'Current Field', detail: 'Physics-based state' },
+  { id: '02', title: 'Observation', detail: 'Sentinel-2 signal' },
+  { id: '03', title: 'Data Fusion', detail: 'Uncertainty-weighted' },
+  { id: '04', title: 'EnKF Process', detail: 'Ensemble update' },
+  { id: '05', title: 'Updated Twin', detail: 'Best estimate' },
+  { id: '06', title: 'Future Forecast', detail: 'Projected trajectory' },
 ] as const;
 
 export const fieldPlants = Array.from({ length: 9 }, (_, row) =>

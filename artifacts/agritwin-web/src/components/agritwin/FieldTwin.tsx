@@ -45,29 +45,36 @@ export function FieldTwin({ state }: FieldTwinProps) {
         <ellipse cx="390" cy="274" rx="315" ry="153" fill="#64745c" opacity=".13" filter="url(#field-shadow)" />
         <g transform={`translate(${shift}, ${state === 'forecast' ? -3 : 0})`} className="transition-transform duration-700">
           <path d="M74 62 L671 54 L710 364 L92 378 Z" fill="url(#field-depth)" stroke="#536b54" strokeWidth="2" />
-          <path d="M74 62 L671 54 L710 364 L92 378 Z" fill="url(#survey-grid)" opacity=".42" />
-          <path d="M92 378 L710 364" stroke="#6d7e64" strokeWidth="2" opacity=".6" />
-          <path d="M74 62 L92 378 M671 54 L710 364" stroke="#94a884" strokeWidth="1" strokeDasharray="4 6" opacity=".8" />
-          {Array.from({ length: 9 }, (_, index) => {
-            const y = 68 + index * 31;
-            return <path key={`furrow-${index}`} d={`M82 ${y} L686 ${y - 5}`} stroke="#718364" strokeWidth="1.5" opacity=".45" />;
-          })}
-          <g className="transition-opacity duration-500" opacity={state === 'forecast' ? 0.84 : 1}>
-            {fieldPlants.map((plant) => {
-              const plantOpacity = state === 'forecast' ? Math.min(1, plant.opacity + 0.13) : highlighted ? Math.min(1, plant.opacity + 0.04) : plant.opacity;
-              return (
-                <g key={`${plant.row}-${plant.column}`} transform={`translate(${plant.x} ${plant.y}) rotate(${plant.lean})`} opacity={plantOpacity}>
-                  <path d={`M0 10 Q-1 ${plant.height * .55} 0 -${plant.height}`} fill="none" stroke={plant.row % 3 === 0 ? '#3f6945' : '#577c50'} strokeWidth={3} strokeLinecap="round" />
-                  <path d={`M0 2 Q${-7 - plant.height / 3} -1 -7 ${plant.height / 3}`} fill="none" stroke="#789769" strokeWidth="2" strokeLinecap="round" />
-                  <path d={`M0 -${plant.height * .3} Q${7 + plant.height / 3} -${plant.height * .1} 8 -${plant.height * .48}`} fill="none" stroke="#789769" strokeWidth="2" strokeLinecap="round" />
-                  {plant.column % 4 === 0 && <circle cx="0" cy={-plant.height - 3} r="2.4" fill="#c49142" opacity=".7" />}
-                </g>
-              );
+          <clipPath id="field-clip">
+            <path d="M74 62 L671 54 L710 364 L92 378 Z" />
+          </clipPath>
+          <g clipPath="url(#field-clip)">
+            <path d="M74 62 L671 54 L710 364 L92 378 Z" fill="url(#survey-grid)" opacity=".42" />
+            <path d="M93 105 C190 82 262 115 355 94 C465 70 565 112 685 91 L690 159 C564 176 481 140 376 157 C272 175 175 142 86 166 Z" fill="#e7eddb" opacity=".34" />
+            <path d="M96 246 C206 221 292 258 393 232 C492 208 589 248 701 225 L706 308 C592 328 505 285 401 311 C292 338 194 294 96 321 Z" fill="#758764" opacity=".12" />
+            <path d="M92 378 L710 364" stroke="#6d7e64" strokeWidth="2" opacity=".6" />
+            <path d="M74 62 L92 378 M671 54 L710 364" stroke="#94a884" strokeWidth="1" strokeDasharray="4 6" opacity=".8" />
+            {Array.from({ length: 10 }, (_, index) => {
+              const y = 68 + index * 31;
+              return <path key={`furrow-${index}`} d={`M82 ${y} L686 ${y - 5}`} stroke="#718364" strokeWidth="1.5" opacity=".45" />;
             })}
+            <g className="transition-opacity duration-500" opacity={state === 'forecast' ? 0.84 : 1}>
+              {fieldPlants.map((plant) => {
+                const plantOpacity = state === 'forecast' ? Math.min(1, plant.opacity + 0.13) : highlighted ? Math.min(1, plant.opacity + 0.04) : plant.opacity;
+                return (
+                  <g key={`${plant.row}-${plant.column}`} transform={`translate(${plant.x} ${plant.y}) rotate(${plant.lean})`} opacity={plantOpacity}>
+                    <path d={`M0 10 Q-1 ${plant.height * .55} 0 -${plant.height}`} fill="none" stroke={plant.row % 3 === 0 ? '#3f6945' : '#577c50'} strokeWidth={3} strokeLinecap="round" />
+                    <path d={`M0 2 Q${-7 - plant.height / 3} -1 -7 ${plant.height / 3}`} fill="none" stroke="#789769" strokeWidth="2" strokeLinecap="round" />
+                    <path d={`M0 -${plant.height * .3} Q${7 + plant.height / 3} -${plant.height * .1} 8 -${plant.height * .48}`} fill="none" stroke="#789769" strokeWidth="2" strokeLinecap="round" />
+                    {plant.column % 4 === 0 && <circle cx="0" cy={-plant.height - 3} r="2.4" fill="#c49142" opacity=".7" />}
+                  </g>
+                );
+              })}
+            </g>
+            <path d="M113 130 Q388 105 669 128" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".8" />
+            <path d="M105 232 Q405 206 687 223" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".55" />
+            <path d="M117 319 Q420 291 699 309" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".45" />
           </g>
-          <path d="M113 130 Q388 105 669 128" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".8" />
-          <path d="M105 232 Q405 206 687 223" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".55" />
-          <path d="M117 319 Q420 291 699 309" fill="none" stroke="#d7dfc8" strokeWidth="1" opacity=".45" />
           <g className={state !== 'current' ? 'marker-pulse' : ''}>
             <circle cx="247" cy="173" r="12" fill="#d97706" fillOpacity=".13" />
             <circle cx="247" cy="173" r="5" fill="#d97706" stroke="#fff9ef" strokeWidth="2" />
