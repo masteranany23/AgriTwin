@@ -39,7 +39,7 @@ import datetime
 import logging
 from typing import Optional
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from backend.app.assimilation.models.observation import (

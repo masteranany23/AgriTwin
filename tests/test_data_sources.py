@@ -16,12 +16,12 @@ Tests:
 
 import datetime as dt
 import uuid
-from typing import Optional
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+
 
 from backend.app.data_sources.weather_source import WeatherSource
 from backend.app.data_sources.soil_source import SoilSource

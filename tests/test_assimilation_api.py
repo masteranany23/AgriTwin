@@ -6,8 +6,8 @@ Integration tests for the EnKF Assimilation REST API endpoints.
 """
 
 import uuid
-import pytest
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 import numpy as np
 

@@ -40,7 +40,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 
@@ -157,7 +157,7 @@ def create_tables() -> None:
     """
     # Import all models so their tables are registered in Base.metadata
     # before create_all() is called.
-    from backend.app.models import farm, field, simulation_run, daily_output  # noqa: F401
+    from backend.app.models import farm  # noqa: F401
     from backend.app.db.base import Base
 
     Base.metadata.create_all(bind=engine)

@@ -51,7 +51,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import settings
+
 from backend.app.core.exceptions import (
     SimulationError,
     WeatherFetchError,
@@ -488,6 +488,54 @@ def _build_response(
         for record in result.daily_output
     ]
 
+    # ── Apply bias correction using stacked ensemble ──────────────────────────
+    # Convert daily output to DataFrame for bias correction
+    import pandas as pd
+    from backend.app.services.bias_correction_service import get_bias_correction_service
+    
+    bias_correction_service = get_bias_correction_service()
+    bias_correction_result = None
+    
+    # Get final yield from WOFOST
+    wofost_final_yield = result.metrics.get("final_twso_kg_ha", 0)
+    
+    # Apply bias correction if service is available
+    if bias_correction_service.is_model_available() and len(result.daily_output) > 0:
+        try:
+            # Convert daily output to DataFrame
+            daily_df = pd.DataFrame(result.daily_output)
+            
+            # Apply bias correction
+            bias_correction_result = bias_correction_service.apply_bias_correction(
+                daily_data=daily_df,
+                wofost_final_yield=wofost_final_yield
+            )
+            
+            # Update final yield if correction was applied
+            if bias_correction_result.get('correction_applied', False):
+                corrected_yield = bias_correction_result['final_yield']
+                logger.info(f"Applied bias correction: {wofost_final_yield:.2f} → {corrected_yield:.2f} kg/ha")
+                wofost_final_yield = corrected_yield
+                
+                # Update metrics with corrected yield
+                result.metrics['final_twso_kg_ha'] = corrected_yield
+                result.metrics['bias_correction_applied'] = True
+                result.metrics['bias_correction_amount'] = bias_correction_result['correction_amount']
+                result.metrics['confidence_interval'] = bias_correction_result['confidence_interval']
+                result.metrics['bias_correction_model'] = bias_correction_result.get('model_used', 'unknown')
+            else:
+                logger.info(f"No bias correction applied: {bias_correction_result.get('message', 'Unknown reason')}")
+                result.metrics['bias_correction_applied'] = False
+                result.metrics['bias_correction_message'] = bias_correction_result.get('message', 'Model not available')
+        except Exception as e:
+            logger.error(f"Error applying bias correction: {e}")
+            result.metrics['bias_correction_applied'] = False
+            result.metrics['bias_correction_error'] = str(e)
+    else:
+        logger.info("Bias correction service not available, using raw WOFOST yield")
+        result.metrics['bias_correction_applied'] = False
+        result.metrics['bias_correction_message'] = 'Model not available'
+
     # ── Metrics → AgronomicMetrics ────────────────────────────────────────────
     # result.metrics is a plain dict from compute_harvest_metrics().
     # AgronomicMetrics validates field types automatically via Pydantic.
@@ -507,12 +555,22 @@ def _build_response(
 
     # ── Compose response ──────────────────────────────────────────────────────
     final_yield = result.metrics.get("final_twso_kg_ha", 0)
+    
+    # Build message with correction info
+    if bias_correction_result and bias_correction_result.get('correction_applied', False):
+        correction_msg = (
+            f" (with {bias_correction_result.get('model_used', 'ML')} bias correction: "
+            f"{bias_correction_result.get('correction_amount', 0):+.0f} kg/ha)"
+        )
+    else:
+        correction_msg = " (no bias correction applied)"
+    
     return SimulateResponse(
         status="success",
         message=(
             f"Simulation completed successfully. "
             f"{result.total_days} days simulated, "
-            f"yield = {final_yield:.0f} kg/ha."
+            f"yield = {final_yield:.0f} kg/ha{correction_msg}."
         ),
         simulation_id=simulation_id,
         request=request,

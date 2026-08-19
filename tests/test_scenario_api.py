@@ -5,7 +5,7 @@ tests/test_scenario_api.py
 Integration tests for the Scenario API endpoints.
 """
 
-import datetime
+
 import pytest
 from fastapi.testclient import TestClient
 

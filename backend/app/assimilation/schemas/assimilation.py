@@ -8,7 +8,7 @@ Defines response and creation schemas for AssimilationRun and AssimilationState.
 import datetime
 import uuid
 from typing import Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class AssimilationStateResponse(BaseModel):

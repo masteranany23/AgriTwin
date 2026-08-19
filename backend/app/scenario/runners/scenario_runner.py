@@ -32,7 +32,7 @@ NOT implemented here:
 import datetime
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 

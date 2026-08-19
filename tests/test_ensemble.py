@@ -6,7 +6,7 @@ Unit tests for the Data Assimilation ensemble infrastructure.
 """
 
 import datetime as dt
-import pytest
+
 
 from backend.app.assimilation.ensemble.ensemble_manager import EnsembleManager
 from backend.app.assimilation.ensemble.ensemble_member import EnsembleMember

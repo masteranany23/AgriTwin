@@ -5,9 +5,9 @@ assimilation/services/assimilation_visualization_service.py
 Service layer handling read-only database queries for EnKF assimilation visualization.
 """
 
-import datetime
+
 import uuid
-from typing import List, Dict, Optional
+from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 

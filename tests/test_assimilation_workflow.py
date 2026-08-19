@@ -6,8 +6,8 @@ Unified integration tests for the complete seasonal EnKF assimilation workflow.
 """
 
 import uuid
-import pytest
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 import numpy as np
 from sqlalchemy.orm import Session

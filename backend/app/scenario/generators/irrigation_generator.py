@@ -36,7 +36,7 @@ NOT implemented here:
 import datetime
 import uuid
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from backend.app.scenario.models.scenario_definition import ScenarioDefinition, GeneratorType

@@ -30,12 +30,12 @@ NOT implemented here:
   - API routes
 """
 
-import datetime
+
 import enum
 import uuid
 from typing import Any, TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import Enum, ForeignKey, Index, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 

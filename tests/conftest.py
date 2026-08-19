@@ -12,7 +12,7 @@ StaticPool is critical for SQLite :memory: databases:
 
 import sys
 import os
-import datetime as dt
+
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
 from backend.app.main import app
-from backend.app.models import Farm, Field, SimulationRun, DailyOutput  # noqa: F401
+from backend.app.models import Field  # noqa: F401
 
 
 @pytest.fixture(scope="session")

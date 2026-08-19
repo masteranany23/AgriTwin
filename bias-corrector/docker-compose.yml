@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  bias-corrector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agritwin-bias-corrector
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount logs for persistence
+      - ./logs:/app/logs
+      # Mount models directory (allows updating models without rebuild)
+      - ./models:/app/models
+      # Mount data for training
+      - ./data:/app/data
+    environment:
+      - ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - agritwin-network
+
+networks:
+  agritwin-network:
+    driver: bridge

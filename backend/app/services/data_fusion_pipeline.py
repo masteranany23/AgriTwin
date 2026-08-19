@@ -17,7 +17,7 @@ RESEARCH ALIGNMENT:
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+
 from datetime import date, timedelta
 from uuid import UUID
 from sqlalchemy.orm import Session

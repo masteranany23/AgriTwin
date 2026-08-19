@@ -51,7 +51,7 @@ import datetime
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, Float, ForeignKey, Index, Integer
+from sqlalchemy import Date, Float, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 

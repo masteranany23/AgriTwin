@@ -13,9 +13,9 @@ Research Alignment:
 """
 
 import logging
-import numpy as np
-from typing import Dict, Optional
-from datetime import datetime, date
+
+
+
 from backend.app.api.schemas.fusion import ConfidenceRequest, ConfidenceResponse, ObservationSource
 
 logger = logging.getLogger(__name__)

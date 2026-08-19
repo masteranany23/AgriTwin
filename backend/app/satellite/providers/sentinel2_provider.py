@@ -2,7 +2,7 @@
 
 import datetime
 from abc import ABC, abstractmethod
-from typing import Optional
+
 from backend.app.satellite.schemas.satellite_scene import SatelliteScene
 
 class Sentinel2Provider(ABC):

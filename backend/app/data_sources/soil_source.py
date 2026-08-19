@@ -17,7 +17,7 @@ Planned future implementations (NOT implemented here):
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+
 
 
 class SoilSource(ABC):

@@ -57,7 +57,7 @@ Usage pattern (in the EnKF assimilation loop):
 from __future__ import annotations
 
 import logging
-import dataclasses
+
 import datetime
 from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING

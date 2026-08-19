@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+r"""
 scripts/fetch_satellite_data.py — Scheduled Satellite Data Fetcher
 ===================================================================
 
-CLI script for automated satellite data fetching.
+CLI script for automated satellite data fetching and LAI observation ingestion.
 Can be run as a cron job or scheduled task.
 
 Usage:
@@ -36,13 +36,16 @@ import datetime as dt
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db, create_tables
 from backend.app.models.field import Field
-from backend.app.services.satellite_fetcher import SatelliteFetcher
+from backend.app.assimilation.repositories.observation_repository import ObservationRepository
+from backend.app.satellite.processors.lai_estimator import LAIEstimator
+from backend.app.satellite.providers.sentinel2_provider import StubSentinel2Provider
+from backend.app.satellite.services.lai_observation_service import LAIObservationService
 
 
 # ── Logging Configuration ─────────────────────────────────────────────────────
@@ -53,6 +56,16 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+# ── Service Factory ───────────────────────────────────────────────────────────
+
+def get_lai_service(db: Session) -> LAIObservationService:
+    """Instantiate LAIObservationService with active database session."""
+    obs_repo = ObservationRepository(db)
+    provider = StubSentinel2Provider()
+    estimator = LAIEstimator()
+    return LAIObservationService(obs_repo=obs_repo, provider=provider, estimator=estimator)
 
 
 # ── CLI Functions ─────────────────────────────────────────────────────────────
@@ -71,7 +84,6 @@ def fetch_for_all_fields(
         max_cloud_cover: Maximum cloud cover threshold
         dry_run: If True, simulate without saving
     """
-    # Get all fields
     fields = db.query(Field).all()
     
     if not fields:
@@ -80,20 +92,16 @@ def fetch_for_all_fields(
     
     logger.info("Found %d fields to process", len(fields))
     
-    # Calculate date range
     end_date = dt.date.today()
     start_date = end_date - dt.timedelta(days=days_back)
     
     logger.info("Fetching data from %s to %s", start_date, end_date)
     
-    # Initialize fetcher
     if dry_run:
-        logger.info("DRY RUN MODE - No data will be saved")
-        return
+        logger.info("DRY RUN MODE - Processing fields without persistent modifications")
     
-    fetcher = SatelliteFetcher(max_cloud_cover=max_cloud_cover)
+    service = get_lai_service(db)
     
-    # Process each field
     total_observations = 0
     failed_fields = []
     
@@ -105,14 +113,19 @@ def fetch_for_all_fields(
             
             logger.info("Processing field: %s (%s)", field.name, field.id)
             
-            results = fetcher.fetch_for_field(field.id, start_date, end_date, db)
+            if not dry_run:
+                results = service.ingest_lai_observations(
+                    field_id=field.id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    max_cloud_cover=max_cloud_cover,
+                )
+                count = len(results)
+            else:
+                count = 0
             
-            total_observations += len(results)
-            
-            logger.info(
-                "Field %s: %d observations created",
-                field.name, len(results)
-            )
+            total_observations += count
+            logger.info("Field %s: %d observations processed", field.name, count)
             
         except Exception as e:
             logger.error("Error processing field %s: %s", field.name, e)
@@ -148,7 +161,6 @@ def fetch_for_single_field(
         max_cloud_cover: Maximum cloud cover threshold
         dry_run: If True, simulate without saving
     """
-    # Get field
     field = db.get(Field, field_id)
     if field is None:
         logger.error("Field %s not found", field_id)
@@ -160,21 +172,24 @@ def fetch_for_single_field(
     
     logger.info("Processing field: %s (%s)", field.name, field_id)
     
-    # Calculate date range
     end_date = dt.date.today()
     start_date = end_date - dt.timedelta(days=days_back)
     
     logger.info("Fetching data from %s to %s", start_date, end_date)
     
     if dry_run:
-        logger.info("DRY RUN MODE - No data will be saved")
+        logger.info("DRY RUN MODE - Verification only")
         return
     
-    # Fetch data
-    fetcher = SatelliteFetcher(max_cloud_cover=max_cloud_cover)
+    service = get_lai_service(db)
     
     try:
-        results = fetcher.fetch_for_field(field.id, start_date, end_date, db)
+        results = service.ingest_lai_observations(
+            field_id=field.id,
+            start_date=start_date,
+            end_date=end_date,
+            max_cloud_cover=max_cloud_cover,
+        )
         
         logger.info("=" * 70)
         logger.info("SUMMARY")
@@ -183,12 +198,11 @@ def fetch_for_single_field(
         logger.info("Observations created: %d", len(results))
         
         if results:
-            logger.info("Sample observations:")
-            for i, result in enumerate(results[:5], 1):
+            logger.info("Sample scenes processed:")
+            for i, scene in enumerate(results[:5], 1):
                 logger.info(
-                    "  %d. Date: %s, NDRE: %.3f, LAI: %.3f, Cloud: %.1f%%, Confidence: %.2f",
-                    i, result['date'], result['ndre'], result['lai'],
-                    result['cloud_cover'] * 100, result['confidence_score']
+                    "  %d. Date: %s, Cloud Cover: %.1f%%, NDVI: %.3f",
+                    i, scene.date, scene.cloud_cover_percentage, scene.ndvi or 0.0
                 )
         
     except Exception as e:
@@ -197,33 +211,24 @@ def fetch_for_single_field(
 
 
 def test_sentinelhub_connection() -> bool:
-    """Test SentinelHub API connection.
-    
-    Returns:
-        True if connection successful, False otherwise
-    """
+    """Test SentinelHub API connection status."""
     try:
         from sentinelhub import SHConfig
         
         config = SHConfig()
         
         if not config.sh_client_id or not config.sh_client_secret:
-            logger.error(
-                "SentinelHub credentials not configured. "
-                "Set SH_CLIENT_ID and SH_CLIENT_SECRET environment variables."
-            )
+            logger.info("SentinelHub API credentials not configured (using synthetic provider for testing).")
             return False
         
-        logger.info("SentinelHub credentials found")
-        logger.info("Instance ID: %s", config.instance_id or "Not set")
-        
+        logger.info("SentinelHub credentials found.")
         return True
         
     except ImportError:
-        logger.error("sentinelhub package not installed")
+        logger.info("sentinelhub package not installed (using built-in synthetic provider).")
         return False
     except Exception as e:
-        logger.error("Error testing SentinelHub connection: %s", e)
+        logger.error("Error checking SentinelHub config: %s", e)
         return False
 
 
@@ -277,16 +282,13 @@ def main():
     
     args = parser.parse_args()
     
-    # Set logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Test connection if requested
     if args.test_connection:
-        success = test_sentinelhub_connection()
-        sys.exit(0 if success else 1)
+        has_creds = test_sentinelhub_connection()
+        sys.exit(0 if has_creds else 1)
     
-    # Validate arguments
     if args.max_cloud_cover < 0.0 or args.max_cloud_cover > 1.0:
         logger.error("max_cloud_cover must be between 0.0 and 1.0")
         sys.exit(1)
@@ -295,18 +297,14 @@ def main():
         logger.error("days_back must be at least 1")
         sys.exit(1)
     
-    # Initialize database
     logger.info("Initializing database connection...")
     create_tables()
     
-    # Get database session
     db_gen = get_db()
     db = next(db_gen)
     
     try:
-        # Process based on arguments
         if args.field_id:
-            # Parse UUID
             try:
                 field_uuid = uuid.UUID(args.field_id)
             except ValueError:
@@ -331,7 +329,7 @@ def main():
     finally:
         db.close()
     
-    logger.info("Satellite data fetch complete")
+    logger.info("Satellite data fetch completed.")
 
 
 if __name__ == "__main__":

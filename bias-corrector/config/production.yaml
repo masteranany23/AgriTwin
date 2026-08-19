@@ -1,0 +1,57 @@
+# Production Configuration
+model:
+  type: "ensemble"
+  enable_gp: true
+  path: "models/ensemble.pkl"
+  gp_path: "models/gp_correction.pkl"
+  ensemble:
+    n_splits: 5
+    test_size: 0.2
+    random_state: 42
+    validation_split: 0.2
+    early_stopping_rounds: 50
+  
+  features:
+    use_satellite: true
+    use_weather: true
+    use_soil_moisture: true
+  
+  xgboost:
+    n_estimators: 200
+    max_depth: 6
+    learning_rate: 0.05
+  
+  random_forest:
+    n_estimators: 200
+    max_depth: 12
+  
+  lightgbm:
+    n_estimators: 200
+    max_depth: 6
+    learning_rate: 0.05
+
+data:
+  training_data_path: "data/training/train.csv"
+  ics_path: "data/ics_ratios"
+  training_file: "data/training/train.csv"
+  ics_file: "data/ics_ratios/ics_2019_2023.json"
+  
+  preprocessing:
+    missing_strategy: "mean"
+    outlier_threshold: 3.0
+
+monitoring:
+  log_predictions: true
+  log_dir: "logs"
+  drift_threshold: 0.10
+  performance_window: 500
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+  log_level: "info"
+
+system:
+  logging_level: "INFO"
+  log_file: "logs/production.log"

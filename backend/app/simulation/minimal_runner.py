@@ -7,8 +7,6 @@ to the original monolithic runner. It uses the clean public API from
 backend/app/simulation/ instead of inline PCSE calls.
 
 Usage:
-    cd /home/vini/Arena/AgriTwin
-    source venv/bin/activate
     python backend/app/simulation/minimal_runner.py
 """
 

@@ -73,3 +73,11 @@ typing-extensions>=4.9.0        # Backported typing features
 # ── Jupyter (for notebooks) ───────────────────────────────────────
 # jupyter==1.0.0                # Jupyter notebooks
 # ipykernel==6.29.0             # Jupyter kernel
+
+
+# ── Machine Learning ──────────────────────────────────────────────
+scikit-learn>=1.4.0             # ML algorithms and ensemble methods
+xgboost>=2.0.0                  # XGBoost gradient boosting
+lightgbm>=4.1.0                 # LightGBM gradient boosting
+pyarrow>=15.0.0                 # Parquet file support
+joblib>=1.3.0                   # Model serialization

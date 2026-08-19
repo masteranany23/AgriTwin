@@ -6,7 +6,7 @@ Unit tests for the stochastic Ensemble Kalman Filter mathematical implementation
 """
 
 import numpy as np
-import pytest
+
 
 from backend.app.assimilation.filters.enkf import enkf_update
 

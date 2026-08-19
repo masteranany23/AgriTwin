@@ -1,35 +1,44 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 
-# Virtual Environment
+# Virtual Environments
 venv/
+.venv/
+.venv*/
+env/
 .env/
+.venv_dev/
 
-# IDE
+# IDE & OS
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
 
 # Logs
 *.log
+logs/
+*.pid
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Build
+# Build & Packaging
 dist/
 build/
 *.egg-info/
+*.egg
+.installed.cfg
 
-# Environment Variables
+# Secrets & Environment Variables
 .env
 .env.*
+.cdsapirc
 
 # Database
 *.db
@@ -38,30 +47,40 @@ build/
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
+agritwin.db
+outputs/agritwin.db
 
-# Cache
+# Caches
 .cache/
+.agritwin_cache/
 pytest_cache/
+.pytest_cache/
 
-# Docker
-*.pid
+# Datasets and Large Data (Store on Cloud/Google Drive)
+data/
+datasets/
+*.nc
+*.tif
+*.tiff
+*.grib
+*.grb
 
-# Temporary datasets
-datasets/cached/
-datasets/weather/
-datasets/satellite/
-
-# External repositories
-external_repos/
-
-# Large docs/context files if desired
-# knowledge/
-
-# PCSE cache
+# Models & Serialized Artifacts
+models/*.pkl
+models/*.pt
+models/*.pth
+models/*.onnx
+models/*.bin
+bias-corrector/models/*.pkl
+bias-corrector/models/*.pt
 *.pkl
+*.h5
 
-# Generated YAML files
+# Keep directory structures where needed
+!bias-corrector/models/.gitkeep
+!bias-corrector/logs/.gitkeep
+
+# External repositories & temporary outputs
+external_repos/
 generated_agro/
 
-# Temporary outputs
-outputs/agritwin.db

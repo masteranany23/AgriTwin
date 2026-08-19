@@ -34,8 +34,8 @@ Test IDs:
 
 import datetime
 import uuid
-from unittest.mock import MagicMock, patch, call
-import warnings
+from unittest.mock import MagicMock, patch
+
 
 import numpy as np
 import pytest

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from uuid import UUID
+
 
 from backend.app.db.session import get_db
 from backend.app.api.schemas.fusion import (

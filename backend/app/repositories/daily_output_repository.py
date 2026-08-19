@@ -36,7 +36,7 @@ import logging
 import uuid
 from typing import Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.models.daily_output import DailyOutput

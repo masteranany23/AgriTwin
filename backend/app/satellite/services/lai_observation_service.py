@@ -4,7 +4,7 @@ import datetime
 import logging
 import math
 import uuid
-from typing import Optional
+
 
 from sqlalchemy import select
 

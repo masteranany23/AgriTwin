@@ -37,11 +37,11 @@ Test IDs:
     SU-25: test_inject_result_date_propagated
 """
 
-import math
+
 import datetime
 from unittest.mock import MagicMock, call
 
-import numpy as np
+
 import pytest
 
 from backend.app.assimilation.updater.state_updater import (

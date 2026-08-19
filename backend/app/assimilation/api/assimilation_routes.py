@@ -8,7 +8,7 @@ FastAPI router for the /assimilation namespace.
 import datetime
 import logging
 import uuid
-from typing import Optional, List
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session

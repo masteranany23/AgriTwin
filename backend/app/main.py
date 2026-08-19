@@ -10,20 +10,20 @@ This file:
   5. Defines the /health check endpoint
 
 How to run:
-    cd /home/vini/Arena/AgriTwin
-    source venv/bin/activate
     uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 
 API documentation (auto-generated):
     http://localhost:8000/docs     — Swagger UI (interactive)
-    http://localhost:8000/redoc   — ReDoc (clean reference)
+    http://localhost:8000/redoc    — ReDoc (clean reference)
 
 Documentation Files:
-    docs/w_shape_grvi_protocol.md     — W-Shape GRVI Protocol (Smartphone LAI)
-    docs/satellite_ndre_fetcher.md    — Sentinel-2 NDRE Automated Fetching
-    docs/era5_land_integration.md     — ERA5-Land Weather & 4-Layer Soil Moisture
-    docs/enkf_design.md               — Ensemble Kalman Filter Design
-    docs/state_variables.md           — WOFOST State Variables Reference
+    docs/ARCHITECTURE.md              — 6-Layer Architecture Reference
+    docs/API_REFERENCE.md             — Complete OpenAPI Reference
+    docs/ENKF_DESIGN.md               — Ensemble Kalman Filter Design
+    docs/BIAS_CORRECTION_ALGORITHM.md — Stacked Ensemble & Deep GP
+    docs/SIMULATION_PIPELINE.md       — WOFOST 7.2 & AgroManagement
+    docs/DATA_FUSION_AND_SATELLITE.md — Sentinel-2 & W-Shape Scouting
+    docs/DATABASE_SCHEMA.md           — Relational Schema & Models
 
 Backend module structure:
     backend/app/
@@ -155,6 +155,14 @@ app = FastAPI(
                 "Complete data fusion pipeline: temporal interpolation with cloud-gap detection, "
                 "spatial alignment, confidence estimation, and multi-source Bayesian fusion. "
                 "Combines satellite, weather, and ground observations into unified high-quality data streams."
+            ),
+        },
+        {
+            "name": "Farmer Advisory & Decision Support",
+            "description": (
+                "Farmer-centric decision support engine: crop profit ranking, optimal sowing window, "
+                "daily irrigation triggers, nitrogen stress / urea recommendations, and bilingual "
+                "English + Hindi actionable summary cards for smallholder farmers (Ram Singh persona)."
             ),
         },
         {

@@ -6,7 +6,7 @@ Unit tests for AssimilationState model and repository.
 """
 
 import datetime as dt
-import uuid
+
 
 import pytest
 from sqlalchemy.orm import Session

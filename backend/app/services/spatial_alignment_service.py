@@ -11,12 +11,12 @@ Research Alignment:
 """
 
 import logging
-import numpy as np
-from typing import Dict, List, Any, Optional, Tuple
+
+from typing import Optional, Tuple
 from uuid import UUID
 from shapely.geometry import Point, Polygon, box
-from shapely.ops import transform
-import pyproj
+
+
 
 from backend.app.models.field import Field
 from backend.app.api.schemas.fusion import (

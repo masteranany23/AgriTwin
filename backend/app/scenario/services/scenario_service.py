@@ -24,7 +24,7 @@ from backend.app.scenario.generators import (
 from backend.app.scenario.runners.scenario_runner import ScenarioRunner
 from backend.app.scenario.services.comparison_engine import ComparisonEngine
 from backend.app.scenario.models.scenario_definition import ScenarioDefinition
-from backend.app.scenario.models.scenario_comparison import ScenarioComparison
+
 
 logger = logging.getLogger(__name__)
 

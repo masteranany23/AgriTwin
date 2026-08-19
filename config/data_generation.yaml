@@ -1,0 +1,74 @@
+# Configuration for training data generation
+
+# Data sources
+data_sources:
+  kaggle_csv_path: "data/raw/kaggle/crop_production.csv"
+  era5_data_dir: "data/raw/era5_land"  # ERA5 downloads directory
+  district_coordinates_path: "data/raw/district_coordinates.csv"  # District lat/lon lookup
+
+# WOFOST configuration
+wofost:
+  executable_path: null  # If using CLI: "path/to/wofost_exe" or null for Python package
+  crop_params_dir: "data/wofost_params/crops"
+  soil_params_dir: "data/wofost_params/soils"
+  agro_params_dir: "data/wofost_params/agro"
+  default_soil_type: "ec3"  # Medium texture soil (common in India)
+
+# Time range
+time_range:
+  start_year: 2020
+  end_year: 2020
+
+# Crop mapping (Kaggle crop names to standard keys)
+crop_mapping:
+  rice: "Rice"
+  wheat: "Wheat"
+  jowar: "Jowar"
+  bajra: "Bajra"
+  maize: "Maize"
+  ragi: "Ragi"
+  cotton: "Cotton"
+  "cotton(lint)": "Cotton"
+  groundnut: "Groundnut"
+  sugarcane: "Sugarcane"
+  barley: "Barley"
+  gram: "Gram"
+  "moong(green gram)": "Gram"
+  rapeseed: "Rapeseed"
+  mustard: "Rapeseed"
+  "rapeseed &mustard": "Rapeseed"
+
+# Season suffixes
+season_suffix:
+  kharif: "_Kh"
+  rabi: "_R"
+  summer: "_S"
+  autumn: "_A"
+  winter: "_W"
+  whole year: ""
+  annual: ""
+
+# Data quality filters
+quality_filters:
+  min_yield: 100        # kg/ha
+  max_yield: 15000      # kg/ha
+  min_area: 10          # hectares (filter out very small records)
+  max_missing_weather_days: 30  # Skip year if > 30 days missing
+
+# Output
+output:
+  training_csv: "bias-corrector/data/training/train.csv"
+  metadata_json: "bias-corrector/data/training/metadata.json"
+  logs_dir: "logs/data_generation"
+
+# Processing
+processing:
+  n_workers: 4          # Parallel workers (tuned for 12GB+ RAM)
+  batch_size: 100       # Process in batches for memory efficiency
+  save_intermediate: true  # Save intermediate results
+  intermediate_dir: "data/intermediate"
+
+# Logging
+logging:
+  level: "INFO"         # DEBUG, INFO, WARNING, ERROR
+  log_file: "logs/data_generation/generation.log"
