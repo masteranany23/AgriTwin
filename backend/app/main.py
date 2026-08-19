@@ -84,6 +84,7 @@ from backend.app.assimilation.api.assimilation_routes import router as assimilat
 from backend.app.satellite.api.routes import router as satellite_router
 from backend.app.api.routes.fusion import router as fusion_router
 from backend.app.api.routes.benchmark_routes import router as benchmark_router
+from backend.app.api.routes.advisory import router as advisory_router
 from backend.app.api.routes.error_correction import router as error_correction_router
 from backend.app.db.session import create_tables
 
@@ -257,6 +258,12 @@ app.include_router(
     fusion_router,
     prefix="/fusion",
     tags=["Data Fusion (Module 3.3)"],
+)
+
+app.include_router(
+    advisory_router,
+    prefix="/advisory",
+    tags=["Farmer Advisory & Decision Support"],
 )
 
 app.include_router(
