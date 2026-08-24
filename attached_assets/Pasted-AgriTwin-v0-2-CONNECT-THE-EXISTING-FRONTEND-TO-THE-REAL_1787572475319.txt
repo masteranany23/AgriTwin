@@ -1,0 +1,282 @@
+AgriTwin v0.2 — CONNECT THE EXISTING FRONTEND TO THE REAL BACKEND
+
+Do NOT redesign the UI.
+Do NOT add new product features.
+Do NOT create mock/demo scientific data.
+Do NOT modify the scientific algorithms or backend behavior.
+
+The goal of this task is ONLY to connect the existing React frontend to the real FastAPI backend in this repository.
+
+Repository:
+https://github.com/masteranany23/AgriTwin
+
+BACKEND ARCHITECTURE
+
+The real backend is located at:
+
+backend/app/main.py
+
+It is a FastAPI application and mounts these real API domains:
+
+/simulate
+/simulations
+/fields
+/scenarios
+/observations
+/satellite
+/assimilation
+/fusion
+/benchmark
+/error-correction
+/health
+
+The backend must be started using the actual application:
+
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+
+Do NOT replace this backend with an Express server, mock API, static JSON server, or simplified API.
+
+FRONTEND
+
+Keep the existing React/Vite multi-page frontend and its current visual design.
+
+The existing frontend already has:
+- React Router
+- TanStack Query
+- typed API client
+- loading states
+- error states
+- charts
+- field visualization
+- assimilation visualization
+- forecast visualization
+
+Preserve all of these.
+
+TASK 1 — REAL API BASE URL
+
+Create/use a frontend environment variable:
+
+VITE_API_BASE_URL
+
+For local/Replit development it should point to the actual FastAPI service.
+
+Do not hard-code localhost URLs throughout the application.
+
+Centralize API configuration in one API client.
+
+TASK 2 — CONNECT EVERY EXISTING PAGE
+
+Audit the existing frontend routes and connect each page to the corresponding real backend endpoint.
+
+At minimum connect:
+
+Fields
+→ /fields
+→ /fields/{field_id}
+
+Simulations
+→ /simulations
+→ /simulations/{simulation_id}
+
+Simulation creation
+→ /simulate
+
+Observations
+→ /observations
+
+Assimilation
+→ /assimilation
+
+Satellite
+→ /satellite
+
+Fusion
+→ /fusion
+
+Scenarios
+→ /scenarios
+
+Benchmark
+→ /benchmark
+
+Scout
+→ the real scout-session endpoints under /fields/{field_id}/scout-session
+
+Do NOT invent endpoint names.
+
+Read the actual FastAPI route files and Pydantic schemas before implementing each request.
+
+TASK 3 — USE REAL RESPONSE SCHEMAS
+
+For every API call:
+
+1. Inspect the corresponding FastAPI route.
+2. Inspect its Pydantic request/response schema.
+3. Match the frontend TypeScript type to the actual backend response.
+4. Map fields explicitly where necessary.
+5. Never guess response property names.
+6. Never fabricate missing values.
+
+The frontend must be compatible with the actual backend JSON.
+
+TASK 4 — REMOVE PLACEHOLDER API BEHAVIOR
+
+Search the frontend for:
+- mock data
+- hard-coded field values
+- illustrative scientific values
+- fake API responses
+- fallback demo datasets
+
+Do NOT delete the UI components.
+
+Instead:
+
+Replace fake scientific values with real API data.
+
+If an endpoint is unavailable or returns no data, show the existing loading/empty/error state.
+
+Never silently substitute fake scientific values.
+
+TASK 5 — BACKEND STARTUP
+
+Configure the Replit development environment so both services can run:
+
+Frontend:
+Vite/React
+
+Backend:
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+
+If necessary, use a single development command/process manager to start both.
+
+The frontend should communicate with the backend through the configured API base URL or a Vite development proxy.
+
+Prefer a Vite proxy for development if that makes the setup simpler.
+
+TASK 6 — CORS
+
+Do NOT weaken or remove the existing scientific backend configuration.
+
+Inspect backend/app/core/config.py and backend/app/main.py.
+
+Configure CORS only as necessary for the Replit frontend origin.
+
+Do not use insecure permanent wildcard configuration for production.
+
+TASK 7 — DATABASE
+
+The backend already has database infrastructure.
+
+Do not create a new database layer.
+
+Do not replace SQLAlchemy models.
+
+Do not create fake database records just to make the UI look populated.
+
+Use the existing backend database configuration.
+
+If the backend cannot start because dependencies/database configuration are missing, diagnose the exact problem rather than creating a mock backend.
+
+TASK 8 — SCIENTIFIC INTEGRITY
+
+This is extremely important.
+
+The backend has already undergone scientific validation.
+
+DO NOT modify:
+- EnKF implementation
+- WOFOST/PCSE simulation logic
+- observation assimilation logic
+- R covariance behavior
+- soil moisture logic
+- numerical stability logic
+- scientific tests
+
+Frontend integration must be read-only with respect to scientific logic.
+
+Do not change backend algorithms merely to make the frontend work.
+
+TASK 9 — HEALTH STATUS
+
+Use:
+
+GET /health
+
+to determine whether the real backend is available.
+
+The UI should clearly distinguish:
+
+Backend connected
+Backend unavailable
+Backend connected but no data
+
+Do not show "connected" merely because the frontend server is running.
+
+TASK 10 — ERROR HANDLING
+
+For every API page implement:
+
+loading state
+success state
+empty state
+API error state
+retry action
+
+Display useful backend errors without exposing stack traces to normal users.
+
+TASK 11 — FRONTEND DATA FLOW
+
+Use TanStack Query for server state.
+
+Do not introduce a second data-fetching architecture.
+
+Keep:
+- query caching
+- invalidation
+- retry behavior
+- typed API calls
+
+consistent across all pages.
+
+TASK 12 — VERIFY THE CONNECTION
+
+After implementation:
+
+1. Start the real FastAPI backend.
+2. Confirm GET /health works.
+3. Confirm GET /docs works.
+4. Test at least one real endpoint from the frontend.
+5. Confirm browser network requests actually reach FastAPI.
+6. Confirm real backend response data appears in the UI.
+7. Run frontend TypeScript check.
+8. Run frontend production build.
+9. Do not modify existing backend scientific tests.
+
+IMPORTANT:
+
+If the scientific backend cannot start because a Python dependency is unavailable, STOP and report the exact dependency/import/startup error.
+
+Do NOT work around the problem by:
+- creating fake APIs
+- creating mock JSON
+- replacing FastAPI
+- hard-coding scientific values
+- modifying scientific algorithms
+
+The final result should be:
+
+React frontend
+        ↓
+TanStack Query
+        ↓
+central API client
+        ↓
+real FastAPI backend
+        ↓
+existing AgriTwin scientific modules/database
+
+Keep the existing UI design intact.
+
+This task is about REAL API INTEGRATION ONLY.
