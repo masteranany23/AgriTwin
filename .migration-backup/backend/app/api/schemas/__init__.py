@@ -1,1 +1,0 @@
-# AgriTwin API schemas

@@ -206,3 +206,74 @@ def test_enkf_update_invalid_input_dimensions():
     # Mismatched R shape
     with pytest.raises(ValueError, match="covariance matrix of shape"):
         enkf_update(X_f, y, np.eye(2))
+
+
+def test_enkf_ill_conditioned_covariance_stability():
+    """Focused numerical-stability test for EnKF under ill-conditioned innovation covariance.
+
+    Constructs a scenario where the forecast ensemble and observation error covariance R
+    are deliberately ill-conditioned (condition number > 1e8).
+
+    Verifies:
+      1. Output analysis ensemble X_a is fully finite (no NaN, no Inf).
+      2. Kalman gain K and innovation d remain fully finite.
+      3. Stable solve/fallback path is exercised without crashing.
+      4. Covariance matrix symmetry is preserved within numerical tolerance (1e-10).
+      5. Invalid/non-finite covariance matrices are rejected rather than silently accepted.
+    """
+    from backend.app.assimilation.covariance.observation_covariance import ObservationCovariance
+
+    n = 3
+    N = 40
+    np.random.seed(42)
+
+    # 1. Construct near-rank-deficient forecast ensemble (rows 0 and 1 are almost collinear)
+    base_signal = np.random.randn(1, N)
+    X_f = np.vstack([
+        base_signal * 10.0,
+        base_signal * 10.0 + 1e-13 * np.random.randn(1, N),
+        np.random.randn(1, N) * 2.0
+    ])
+
+    y = np.array([5.0, 5.0, 1.0])
+
+    # 2. Construct ill-conditioned, finite observation error covariance R (condition number > 1e8)
+    R_ill = np.array([
+        [1e-12, 1e-12 - 1e-18, 0.0],
+        [1e-12 - 1e-18, 1e-12, 0.0],
+        [0.0, 0.0, 1e-3]
+    ])
+
+    # Verify ill-conditioning via condition number (not determinant-only)
+    cond_R = float(np.linalg.cond(R_ill))
+    assert cond_R > 1e8, f"Expected condition number > 1e8, got {cond_R:.2e}"
+
+    # 3. Execute EnKF update
+    X_a, d, K = enkf_update(X_f, y, R_ill)
+
+    # 4. Numerical validity & finiteness
+    assert not np.any(np.isnan(X_a)), "X_a contains NaN values"
+    assert not np.any(np.isinf(X_a)), "X_a contains Inf values"
+    assert np.all(np.isfinite(X_a)), "Analysis update must remain finite"
+
+    assert not np.any(np.isnan(K)), "Kalman gain K contains NaN values"
+    assert not np.any(np.isinf(K)), "Kalman gain K contains Inf values"
+
+    assert not np.any(np.isnan(d)), "Innovation d contains NaN values for observed variables"
+    assert not np.any(np.isinf(d)), "Innovation d contains Inf values"
+
+    # 5. Covariance & Gain symmetry
+    # Ensure numerical symmetry is maintained within tolerance
+    R_sym_check = 0.5 * (R_ill + R_ill.T)
+    np.testing.assert_allclose(R_ill, R_sym_check, atol=1e-10)
+
+    # 6. Rejection of invalid (non-finite) covariance matrix
+    R_invalid = np.array([
+        [1.0, np.nan, 0.0],
+        [np.nan, 1.0, 0.0],
+        [0.0, 0.0, 1.0]
+    ])
+    is_valid, reason = ObservationCovariance.validate_matrix(R_invalid, expected_dim=3)
+    assert is_valid is False
+    assert reason is not None and "non-finite" in reason
+

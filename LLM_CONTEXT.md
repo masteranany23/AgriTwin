@@ -29,94 +29,36 @@ AgriTwin is a Python/FastAPI Agricultural Digital Twin platform. It uses the Wag
 ## 📂 2. Detailed Module & File Architecture
 
 ```text
-backend/app/
-├── main.py                             # FastAPI app instance, CORS middleware, router mounting
-├── core/
-│   ├── config.py                       # Application settings & environment variables
-│   └── exceptions.py                   # Custom exception hierarchy
-├── db/
-│   ├── base.py                         # SQLAlchemy DeclarativeBase
-│   └── session.py                      # Engine creation & get_db dependency
-├── models/                             # Core ORM entities
-│   ├── farm.py                         # Farm model (parent grouping of fields)
-│   ├── field.py                        # Field model (GeoJSON boundary, centroid, elevation)
-│   ├── simulation_run.py               # SimulationRun model (open-loop baseline metadata)
-│   ├── daily_output.py                 # DailyOutput model (daily WOFOST time series)
-│   └── assimilation_run.py             # AssimilationRun model (EnKF loop execution record)
-├── repositories/                       # Fast SQL query layer
-│   ├── field_repository.py             # CRUD operations for fields
-│   ├── simulation_repository.py        # CRUD operations for simulation runs
-│   └── daily_output_repository.py      # Mass daily output bulk inserts & retrieval
-├── data_sources/                       # External API clients & weather/soil adapters
-│   ├── nasa_power_source.py            # NASA POWER daily weather API client with filesystem caching
-│   ├── soilgrids_source.py             # ISRIC SoilGrids REST API client
-│   ├── era5_land_source.py             # ERA5-Land reanalysis dataset client
-│   ├── era5_land_weather_source.py    # ERA5-Land weather data adapter
-│   ├── sensor_source.py                # IoT soil moisture telemetry adapter
-│   └── satellite_source.py             # Satellite imagery ingestion interface
-├── services/                           # Business logic services
-│   ├── simulation_service.py           # WOFOST simulation orchestrator
-│   ├── weather_service.py              # Hybrid weather service router (ERA5-Land + NASA POWER)
-│   ├── soil_service.py                 # SoilGrids texture mapping to WOFOST hydraulic parameters
-│   ├── temporal_interpolation_service.py # Gap filling & monsoon cloud-gap detector
-│   ├── spatial_alignment_service.py    # Multi-resolution polygon grid aligner
-│   ├── confidence_estimator.py          # Observation confidence & R-matrix calculator
-│   ├── multi_source_fusion_service.py  # Bayesian multi-source fusion engine
-│   ├── data_fusion_pipeline.py         # Module 3.3 end-to-end pipeline runner
-│   ├── error_correction_service.py      # Residual error correction service
-│   └── window_generator.py             # Moving window generator
-├── satellite/                          # Remote Sensing LAI Processing Subsystem
-│   ├── api/routes.py                   # GET /satellite/lai endpoint
-│   ├── processors/
-│   │   ├── vegetation_indices.py       # NDVI, EVI, NDRE calculator functions
-│   │   └── lai_estimator.py            # Beer-Lambert extinction LAI estimator
-│   ├── providers/sentinel2_provider.py # Sentinel-2 provider & SCL cloud masking
-│   ├── schemas/satellite_scene.py      # Pydantic schemas for satellite scenes
-│   └── services/lai_observation_service.py # Remote sensing workflow runner
-├── simulation/                         # PCSE WOFOST Engine Wrapper
-│   ├── engine.py                       # PCSE WOFOST execution engine wrapper
-│   ├── agromanagement.py               # Agromanagement YAML builder & rice DVSI fix
-│   ├── crop_provider.py                # WOFOST crop parameter file provider
-│   ├── soil_provider.py                # PCSE soil parameter struct builder
-│   ├── site_provider.py                # PCSE site parameter builder
-│   ├── weather_provider.py             # PCSE weather provider builder
-│   └── output_parser.py                # PCSE raw output dict parser
-├── scenario/                           # Deterministic Scenario Sweeper
-│   ├── api/scenario_routes.py          # POST /scenarios endpoints
-│   ├── generators/                     # Sowing date, crop variety, & irrigation strategy generators
-│   ├── models/                         # Scenario run & comparison ORM models
-│   ├── runners/scenario_runner.py      # Scenario execution runner
-│   └── services/comparison_engine.py   # Yield & Water Use Efficiency (WUE) evaluator
-├── assimilation/                       # Ensemble Kalman Filter Subsystem
-│   ├── api/
-│   │   ├── assimilation_routes.py      # POST /assimilation/run, history, timeseries endpoints
-│   │   └── observation_routes.py       # Observation CRUD endpoints
-│   ├── ensemble/
-│   │   ├── ensemble_manager.py         # Perturbed ensemble builder (N parallel models)
-│   │   └── ensemble_member.py          # Individual ensemble member container
-│   ├── filters/enkf.py                 # EnKF mathematical update core (P^f, K, A^a)
-│   ├── forecast/forecast_step.py       # Sequential forecast orchestrator
-│   ├── models/
-│   │   ├── assimilation_state.py       # AssimilationState ORM model (logs priors, posteriors, innovations)
-│   │   ├── observation.py              # Observation ORM model
-│   │   └── observation_batch.py        # Observation batch container
-│   ├── repositories/                   # DB persistence repositories for EnKF
-│   ├── schemas/                        # EnKF request/response models & visualizer schemas
-│   ├── services/
-│   │   ├── assimilation_service.py     # Sequential forecast-assimilation loop runner
-│   │   └── assimilation_visualization_service.py # ZOH offset projected timeseries visualizer
-│   ├── state/state_vector.py           # Physical StateVector layout (LAI, SM, WLV, WST, WRT, WSO)
-│   └── updater/state_updater.py        # Non-destructive PCSE state variable updater
-└── api/                                # Core API Controllers & Schemas
-    ├── routes/
-    │   ├── simulate.py                 # POST /simulate, GET /simulate/crops
-    │   ├── simulations.py              # GET/DELETE /simulations history
-    │   ├── fields.py                   # CRUD /fields management
-    │   ├── scout_sessions.py           # POST /fields/{id}/scout-session (W-shape GRVI)
-    │   ├── fusion.py                   # Module 3.3 Data Fusion endpoints
-    │   ├── interpolation.py            # Temporal interpolation endpoints
-    │   └── error_correction.py         # Residual error correction endpoints
-    └── schemas/                        # Pydantic validation schemas
+AgriTwin/
+├── backend/                            # Python FastAPI Scientific Backend
+│   └── app/
+│       ├── main.py                     # FastAPI app instance, CORS middleware, router mounting
+│       ├── core/                       # Settings & custom exceptions
+│       ├── db/                         # SQLAlchemy session & base
+│       ├── models/                     # Core ORM entities (Farm, Field, SimulationRun, DailyOutput, AssimilationRun)
+│       ├── repositories/               # Fast SQL query layer
+│       ├── data_sources/               # External API clients (NASA POWER, SoilGrids, ERA5-Land)
+│       ├── services/                   # Core business logic services
+│       ├── satellite/                  # Remote Sensing LAI Processing Subsystem (Sentinel-2 NDRE)
+│       ├── simulation/                 # PCSE WOFOST Engine Wrapper
+│       ├── scenario/                   # Deterministic Scenario Sweeper
+│       ├── assimilation/               # Ensemble Kalman Filter Subsystem (EnKF, StateVector, StateUpdater)
+│       └── api/                        # Core API Controllers & Schemas
+├── frontend/                           # React 19 + Vite + Tailwind Web Frontend Application
+│   ├── src/
+│   │   ├── api/client.ts               # Typed API client mapping all live backend endpoints
+│   │   ├── components/                 # Reusable UI panels, controls, and visual components
+│   │   ├── App.tsx                     # Multi-page routing layout (Simulations, Fields, Satellite, Scenarios, Fusion, EnKF)
+│   │   ├── main.tsx                    # React application entrypoint
+│   │   └── index.css                   # Tailwind styles and custom design system rules
+│   ├── .env                            # Environment variables (VITE_API_BASE_URL)
+│   ├── package.json                    # Workspace frontend dependencies
+│   ├── tsconfig.json                   # TypeScript compiler configuration
+│   └── vite.config.ts                  # Development server & proxy configuration (maps `/api/*` to port 8000)
+├── external_repos/                     # WOFOST crop parameter files & PCSE modules
+├── lib/                                # Shared API client packages
+└── docs/                               # Architectural documentation
+```
 ```
 
 ---
@@ -178,13 +120,18 @@ When cloud cover obscures satellite view for $>10$ consecutive days, temporal in
 The canonical observation vector construction in `AssimilationService._build_observation_vector` dynamically bridges physical `Observation` inputs to the EnKF filter step:
 1. **Quality Control Filtering**: Raw observations are filtered using `QualityControlService` against physical bounds, quality score cutoffs, cloud thresholds, and Z-score outlier gates relative to ensemble forecasts.
 2. **Confidence Estimation**: Each valid observation undergoes dynamic confidence scoring via `ConfidenceEstimator.estimate_confidence()` based on sensor provider base reliability, observation age decay, spatial alignment, and cloud cover.
-3. **Multi-Source Bayesian Fusion**: When multiple observations exist for the same variable on a given date (e.g. Sentinel-2 LAI + Smartphone GRVI), `MultiSourceFusionService.fuse_observations()` applies inverse-variance weighting ($\frac{1}{\sigma^2}$) to compute a unified fused measurement value.
-4. **Observation Covariance Abstraction (`ObservationCovariance`)**:
+3. **Observation Operator Abstraction & Surface vs. Root-Zone Soil Moisture Distinction**:
+   - **WOFOST SM Physics**: WOFOST `SM` is defined as root-zone volumetric water content ($0 - \text{RD}\text{ cm}$, where $W = \text{SM} \times \text{RD}$).
+   - `ROOT_ZONE_SOIL_MOISTURE` / `DirectObservationOperator`: Applied to observations that directly observe target WOFOST state variables (e.g. root-zone `SM` from in-situ soil probes or `LAI` from satellite). Metadata: `observation_depth="0-100 cm"`, `observation_support="root_zone"`.
+   - `SURFACE_SOIL_MOISTURE` / `SurfaceSoilMoistureObservationOperator`: Applied to surface-sensitive remote sensing observations ($0 - 5\text{ cm}$, support=`surface_skin`). Surface remote sensing SM is a distinct physical quantity and requires a dedicated observation operator before assimilation. Direct mapping of surface soil moisture to WOFOST root-zone `SM` is explicitly rejected when vertical 1D hydrology models are unconfigured (`UnsupportedObservationError`). No hydrological surface-to-root-zone conversion is implemented yet.
+   - **Assimilation Diagnostics**: When `SM` is updated during an EnKF cycle, detailed diagnostics ($\text{prior SM}$, $\text{observed/fused SM}$, $\text{posterior SM}$, $\Delta\text{SM}$, $\text{RD}$, implied $\Delta W = \Delta\text{SM} \times \text{RD}$, and uncertainty) are recorded in `fusion_diagnostics`.
+4. **Multi-Source Bayesian Fusion**: When multiple observations exist for the same variable on a given date (e.g. Sentinel-2 LAI + Smartphone GRVI), `MultiSourceFusionService.fuse_observations()` applies inverse-variance weighting ($\frac{1}{\sigma^2}$) to compute a unified fused measurement value.
+5. **Observation Covariance Abstraction (`ObservationCovariance`)**:
    - **Diagonal Independence Assumption (Default)**: By default, observation errors across distinct state variables or sensor streams are assumed independent. The observation error matrix $R$ is diagonal ($R = \text{diag}(\sigma_i^2)$).
    - **Explicit Covariance Support**: Supports an explicit full matrix when supplied by a trusted component (e.g. multi-source data fusion or remote sensing retrieval model).
    - **Strict Validation Rules**: Validates matrices for square dimensions, finiteness (no NaN/Inf), symmetry ($R = R^T$), and positive semi-definiteness ($\text{eig} \ge -1e-10$).
    - **Zero Off-Diagonal Invention & Safe Fallback**: Off-diagonal covariance values are NEVER invented. Invalid explicit matrices are safely rejected with a warning and fall back to the diagonal variance structure.
-5. **Diagnostics & Auditability**: Stores complete fusion metadata, including sources used, individual confidence scores, and dynamic variances, directly inside the `fusion_diagnostics` property of `AssimilationCycleResult` and `AssimilationState`.
+6. **Diagnostics & Auditability**: Stores complete fusion metadata, including sources used, individual confidence scores, and dynamic variances, directly inside the `fusion_diagnostics` property of `AssimilationCycleResult` and `AssimilationState`.
 
 ### H. Centralized QualityControlService Architecture
 Observation quality control across `AssimilationService`, `DataFusionPipeline`, and `LAIObservationService` is consolidated into `QualityControlService` (`backend/app/services/quality_control_service.py`):

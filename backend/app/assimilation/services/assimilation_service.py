@@ -38,7 +38,12 @@ import numpy as np
 from backend.app.assimilation.ensemble.ensemble_manager import EnsembleManager
 from backend.app.assimilation.filters.enkf import enkf_update
 from backend.app.assimilation.forecast.forecast_step import forecast_until
-from backend.app.assimilation.operators.observation_operator import DirectObservationOperator
+from backend.app.assimilation.operators.observation_operator import (
+    DirectObservationOperator,
+    SurfaceSoilMoistureObservationOperator,
+    UnsupportedObservationError,
+    get_observation_operator,
+)
 from backend.app.assimilation.models.assimilation_state import AssimilationState
 from backend.app.assimilation.models.observation import Observation, ObservationSource, ObservationStatus
 from backend.app.assimilation.repositories.assimilation_state_repository import AssimilationStateRepository
@@ -56,16 +61,20 @@ logger = logging.getLogger(__name__)
 
 # Map observation variable_name (uppercase DB convention) → StateVector lowercase key
 _OBS_VAR_TO_SV: dict[str, str] = {
-    "LAI":   "lai",
-    "SM":    "sm",
-    "TAGP":  "tagp",
-    "TWSO":  "twso",
-    "RFTRA": "rftra",
-    "TWLV":  "twlv",
-    "TWST":  "twst",
-    "TWRT":  "twrt",
-    "DVS":   "dvs",
-    "RD":    "rd",
+    "LAI":                      "lai",
+    "SM":                       "sm",
+    "ROOT_ZONE_SOIL_MOISTURE":  "sm",
+    "ROOT_ZONE_SM":             "sm",
+    "SURFACE_SOIL_MOISTURE":    "sm",
+    "SURFACE_SM":                "sm",
+    "TAGP":                     "tagp",
+    "TWSO":                     "twso",
+    "RFTRA":                    "rftra",
+    "TWLV":                     "twlv",
+    "TWST":                     "twst",
+    "TWRT":                     "twrt",
+    "DVS":                      "dvs",
+    "RD":                       "rd",
 }
 
 
@@ -414,6 +423,36 @@ class AssimilationService:
         ]
         logger.info("Cycle %s: EnKF updated %d variables: %s", obs_date, len(variables_updated), variables_updated)
 
+        if "sm" in variables_updated:
+            sm_idx = STATE_INDEX["sm"]
+            prior_sm = float(x_mean_f[sm_idx])
+            obs_sm = float(y[sm_idx]) if not np.isnan(y[sm_idx]) else None
+            post_sm = float(x_mean_a[sm_idx])
+            delta_sm = float(post_sm - prior_sm)
+
+            rd_vals = []
+            for m in manager.members:
+                try:
+                    if hasattr(m, "wofost") and hasattr(m.wofost, "get_variable"):
+                        val = m.wofost.get_variable("RD")
+                        if val is not None and float(val) > 0:
+                            rd_vals.append(float(val))
+                except Exception:
+                    pass
+            rd = float(np.mean(rd_vals)) if rd_vals else 10.0
+            implied_delta_w = float(delta_sm * rd)
+            unc = float(np.sqrt(R[sm_idx, sm_idx])) if not np.isnan(R[sm_idx, sm_idx]) else None
+
+            fusion_diag["sm_diagnostics"] = {
+                "prior_sm": round(prior_sm, 6),
+                "observed_sm": round(obs_sm, 6) if obs_sm is not None else None,
+                "posterior_sm": round(post_sm, 6),
+                "delta_sm": round(delta_sm, 6),
+                "rd": round(rd, 4),
+                "implied_delta_w": round(implied_delta_w, 6),
+                "uncertainty": round(unc, 6) if unc is not None else None,
+            }
+
         # ── 6. Persist AssimilationState ──────────────────────────────────
         state_id = self._persist(
             X_f=X_f, X_a=X_a, y=y, d=d, K=K,
@@ -578,6 +617,18 @@ class AssimilationService:
                     r_std = float(conf_resp.observation_error_r)
 
                 r_var = r_std ** 2
+
+                # Select observation operator based on variable and source provenance
+                src_str = getattr(obs.source, "value", str(obs.source))
+                op = get_observation_operator(obs.variable_name, source=src_str, uncertainty=r_std)
+                if isinstance(op, SurfaceSoilMoistureObservationOperator):
+                    logger.warning(
+                        "AssimilationService: Surface SM observation from %s (depth 0-5 cm, support=surface_skin) "
+                        "cannot be directly mapped to WOFOST root-zone SM (0-100 cm) without vertical hydrology model — skipping direct SM update",
+                        src_str,
+                    )
+                    continue
+
                 prepared_obs.append((obs, fusion_src, conf_resp, r_std, r_var))
 
             if not prepared_obs:

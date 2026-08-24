@@ -117,3 +117,68 @@ def test_no_off_diagonal_invention():
         for j in range(5):
             if i != j:
                 assert cov.matrix[i, j] == 0.0
+
+
+def test_observation_uncertainty_influence_invariant():
+    """Scientific regression test for observation uncertainty influence.
+
+    Uses identical forecast ensemble and observation to evaluate two cases:
+      Case A: Low observation uncertainty  (small R)
+      Case B: High observation uncertainty (large R)
+
+    Verifies:
+      1. Both cases remain numerically valid (finite values, no unexpected NaNs/Infs).
+      2. Lower R (low uncertainty) produces stronger observation influence (larger update, analysis closer to obs).
+      3. Higher R (high uncertainty) produces weaker observation influence (smaller update, analysis closer to forecast).
+      4. Unobserved/uncorrelated variables do not change unexpectedly.
+    """
+    from backend.app.assimilation.filters.enkf import enkf_update
+
+    n = 3
+    N = 100
+    np.random.seed(42)
+
+    # Forecast ensemble with mean ~ 2.0 and non-zero variance
+    X_f = np.random.randn(n, N) * 1.5 + 2.0
+    # Unobserved, zero-variance variable 2 for unexpected change check
+    X_f[2, :] = 5.0
+
+    # Observation on variable 0: value = 8.0 (higher than forecast mean ~2.0)
+    y = np.array([8.0, np.nan, np.nan])
+
+    # Case A: Low observation uncertainty (R_A_00 = 0.01)
+    R_A = np.diag([0.01, 1.0, 1.0])
+    X_a_A, d_A, K_A = enkf_update(X_f, y, R_A)
+
+    # Case B: High observation uncertainty (R_B_00 = 100.0)
+    R_B = np.diag([100.0, 1.0, 1.0])
+    X_a_B, d_B, K_B = enkf_update(X_f, y, R_B)
+
+    # 1. Numerical validity
+    assert np.all(np.isfinite(X_a_A[0:2, :]))
+    assert np.all(np.isfinite(X_a_B[0:2, :]))
+    assert np.all(np.isfinite(K_A))
+    assert np.all(np.isfinite(K_B))
+
+    # 2. Compute posterior means and update magnitudes
+    mean_f = np.mean(X_f, axis=1)
+    mean_a_A = np.mean(X_a_A, axis=1)
+    mean_a_B = np.mean(X_a_B, axis=1)
+
+    update_mag_A = abs(mean_a_A[0] - mean_f[0])
+    update_mag_B = abs(mean_a_B[0] - mean_f[0])
+
+    dist_to_obs_A = abs(mean_a_A[0] - y[0])
+    dist_to_obs_B = abs(mean_a_B[0] - y[0])
+
+    # 3. Verify lower R -> stronger observation influence (larger update, closer to obs)
+    assert update_mag_A > update_mag_B
+    assert dist_to_obs_A < dist_to_obs_B
+
+    # Kalman gain on observed variable is higher for small R
+    assert K_A[0, 0] > K_B[0, 0]
+
+    # 4. Verify unobserved/uncorrelated variable (index 2) does not change unexpectedly
+    np.testing.assert_allclose(X_a_A[2, :], X_f[2, :], atol=1e-12)
+    np.testing.assert_allclose(X_a_B[2, :], X_f[2, :], atol=1e-12)
+

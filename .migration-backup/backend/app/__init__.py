@@ -1,1 +1,0 @@
-# AgriTwin backend application package

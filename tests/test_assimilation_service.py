@@ -40,6 +40,7 @@ import warnings
 import numpy as np
 import pytest
 
+from backend.app.assimilation.filters.enkf import enkf_update
 from backend.app.assimilation.services.assimilation_service import (
     AssimilationService,
     AssimilationConfig,
@@ -706,3 +707,55 @@ def test_run_season_passes_assimilation_run_id_to_persist(mock_enkf, mock_foreca
     assert state_repo.save_state.call_count == 1
     saved_state = state_repo.save_state.call_args[0][0]
     assert saved_state.assimilation_run_id == assim_run_id
+
+
+@patch("backend.app.assimilation.services.assimilation_service.forecast_until")
+def test_zero_valid_observations_assimilation_invariant(mock_forecast):
+    """AS-29: Invariant test — zero valid observations leaves posterior identical to forecast within numerical tolerance.
+
+    Verifies that when zero valid observations are present:
+    1. State values are unchanged (prior mean == posterior mean).
+    2. Ensemble matrix values are unchanged (X_a == X_f within 1e-12).
+    3. No NaNs or infinities are introduced into valid state variables.
+    4. Covariance is uncorrupted (K == 0).
+    5. No artificial correction is applied (d is all NaN, obs_assimilated == 0).
+    """
+    N = 25
+    np.random.seed(42)
+    X_f = np.random.uniform(low=0.5, high=5.0, size=(STATE_DIM, N))
+    x_mean_f = np.mean(X_f, axis=1)
+
+    mock_forecast.return_value = (X_f, x_mean_f)
+
+    service, obs_repo, state_repo = _make_service(obs_list=[])
+    obs_repo.get_by_date.return_value = []
+    manager = _make_manager(n=N)
+
+    result = service.run_single_cycle(manager, TODAY, field_id=FIELD_ID)
+
+    # 1. State values unchanged
+    for var in STATE_VARIABLES:
+        prior_val = result.ensemble_mean_prior.get(var)
+        post_val = result.ensemble_mean_post.get(var)
+        if prior_val is not None and post_val is not None:
+            assert abs(prior_val - post_val) < 1e-12
+
+    # 2. Ensemble values unchanged & no artificial correction applied
+    assert result.skipped is True
+    assert result.obs_assimilated == 0
+    assert result.variables_updated == []
+
+    # 3. Direct EnKF math level verification
+    y_zero = np.full(STATE_DIM, np.nan)
+    R_diag = np.eye(STATE_DIM)
+    X_a, d, K = enkf_update(X_f, y_zero, R_diag)
+
+    # State & ensemble values unchanged
+    np.testing.assert_allclose(X_a, X_f, rtol=1e-12, atol=1e-12)
+    # No NaNs introduced into valid entries
+    assert not np.any(np.isnan(X_a))
+    # No covariance corruption (Kalman gain is zero)
+    np.testing.assert_allclose(K, 0.0, atol=1e-12)
+    # No artificial innovation applied
+    assert np.all(np.isnan(d))
+

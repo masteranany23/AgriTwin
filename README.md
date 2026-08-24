@@ -172,6 +172,8 @@ flowchart TD
 - **Quality Control, Dynamic Data Fusion & Persistence (`assimilation/services/assimilation_service.py`)**:
   - Delegates pre-assimilation filtering to `QualityControlService` for physical bounds, quality scores, satellite cloud cover, and forecast Z-score outlier gating.
   - Dynamically routes valid observations through `ConfidenceEstimator` and `MultiSourceFusionService` to generate fused observation vectors ($y$) and observation error covariance matrices ($R$) using `ObservationCovariance`.
+  - Enforces explicit observation operator selection via `get_observation_operator`: WOFOST `SM` represents root-zone volumetric water content ($0 - \text{RD}\text{ cm}$, where $W = \text{SM} \times \text{RD}$). Genuine root-zone observations (`ROOT_ZONE_SOIL_MOISTURE` / in-situ probes) use `DirectObservationOperator` (`0-100 cm`, support=`root_zone`). Surface-sensitive remote sensing (`SURFACE_SOIL_MOISTURE` / satellite microwave radiometry $0-5\text{ cm}$, support=`surface_skin`) represents a distinct physical quantity; direct mapping to WOFOST root-zone `SM` is rejected when a vertical hydrology model is unconfigured. No hydrological conversion is implemented yet.
+  - Records detailed SM assimilation diagnostics ($\text{prior SM}$, $\text{observed SM}$, $\text{posterior SM}$, $\Delta\text{SM}$, $\text{RD}$, implied $\Delta W = \Delta\text{SM} \times \text{RD}$, and uncertainty) in `fusion_diagnostics`.
   - Enforces the **Diagonal Independence Assumption** by default (uncorrelated observations), with optional validation of full correlated matrices supplied by trusted fusion components. Off-diagonal terms are never invented out of thin air.
   - Logs step-by-step priors, posteriors, innovations, dynamic $R$ variances, and fusion diagnostics metadata into `AssimilationState`.
 - **Canonical State Estimation & Deprecation of Secondary Mutation**:
@@ -311,105 +313,46 @@ AgriTwin/
 ├── alembic/                             # Database migration scripts & schemas
 │   ├── env.py                           # Migration environment configuration
 │   └── versions/                        # Sequential database schema migration files
-├── backend/
+├── backend/                             # Python FastAPI Scientific Backend
 │   └── app/
 │       ├── main.py                      # FastAPI app entrypoint & router mounts
 │       ├── api/                         # Primary API routes & Pydantic schemas
-│       │   ├── routes/
-│       │   │   ├── simulate.py          # POST /simulate (open-loop WOFOST runner)
-│       │   │   ├── simulations.py       # GET/DELETE /simulations history
-│       │   │   ├── fields.py            # CRUD /fields management
-│       │   │   ├── scout_sessions.py    # POST /fields/{id}/scout-session (W-shape GRVI)
-│       │   │   ├── fusion.py            # Data fusion endpoints (Module 3.3)
-│       │   │   ├── interpolation.py     # Temporal interpolation routes
-│       │   │   └── error_correction.py  # Error correction utilities
-│       │   └── schemas/                 # Request & Response Pydantic models
 │       ├── assimilation/                # Ensemble Kalman Filter Subsystem
-│       │   ├── api/                     # Assimilation & Observation routes
-│       │   ├── ensemble/                # Ensemble member & manager perturbators
-│       │   ├── filters/                 # EnKF mathematical update core (enkf.py)
-│       │   ├── forecast/                # Step-by-step forecast loop orchestrator
-│       │   ├── models/                  # Assimilation ORM models (AssimilationState)
-│       │   ├── repositories/            # DB persistence handlers for EnKF cycles
-│       │   ├── schemas/                 # EnKF request/response models & visualization contracts
-│       │   ├── services/                # Sequential assimilation & ZOH visualizer
-│       │   ├── state/                   # EnKF StateVector layout & matrix converters
-│       │   └── updater/                 # Non-destructive PCSE state variable updater
 │       ├── core/                        # System configurations & custom exceptions
-│       ├── data_sources/                # Geospatial weather & soil data adapters
-│       │   ├── nasa_power_source.py     # NASA POWER weather API client
-│       │   ├── soilgrids_source.py      # ISRIC SoilGrids REST client
-│       │   ├── era5_land_source.py      # ERA5-Land reanalysis client
-│       │   ├── era5_land_weather_source.py # ERA5-Land weather adapter
-│       │   ├── sensor_source.py         # IoT soil moisture telemetry adapter
-│       │   └── satellite_source.py      # Satellite scene ingestion interface
-│       ├── db/                          # Database connection session & SQLAlchemy base
-│       ├── models/                      # SQLAlchemy ORM Models (Farm, Field, SimulationRun, DailyOutput)
-│       ├── repositories/                # DB repositories for core entities
-│       ├── satellite/                   # Remote Sensing LAI Processing Pipeline
-│       │   ├── api/                     # GET /satellite/lai route
-│       │   ├── processors/              # NDVI, EVI, NDRE & LAI estimator functions
-│       │   ├── providers/               # Sentinel-2 provider & SCL cloud masking
-│       │   ├── schemas/                 # Satellite scene schemas
-│       │   └── services/                # LAI observation calculation service
-│       ├── features/                    # Leakage-Safe Feature Engine
-│       │   ├── feature_engine.py        # Tabular feature extraction engine (ΔLAI/Δt, ΔTAGP/Δt, stress, innovation, obs quality)
-│       │   └── schemas.py               # FeatureVector & category Pydantic schemas
 │       ├── crops/                       # Crop Model Configuration & Registry
-│       │   ├── defaults.py              # Default CropConfig definitions (wheat, rice, maize, etc.)
-│       │   ├── registry.py              # CropRegistry manager & auto-discovery engine
-│       │   └── schemas.py               # CropConfig, Phenology, Observation & Calibration schemas
+│       ├── data_sources/                # Geospatial weather & soil data adapters
+│       ├── db/                          # Database connection session & SQLAlchemy base
+│       ├── features/                    # Leakage-Safe Feature Engine
+│       ├── models/                      # SQLAlchemy ORM Models
+│       ├── repositories/                # DB repositories for core entities
 │       ├── residual/                    # Residual Yield Model Abstraction
-│       │   ├── base.py                  # ResidualModel ABC interface
-│       │   ├── no_residual.py           # NoResidualModel default identity fallback
-│       │   ├── registry.py              # ResidualModelRegistry manager
-│       │   └── schemas.py               # ModelMetadata & prediction schemas
+│       ├── satellite/                   # Remote Sensing LAI Processing Pipeline
 │       ├── scenario/                    # Deterministic Scenario Sweeper Subsystem
-│       │   ├── api/                     # POST /scenarios endpoints
-│       │   ├── generators/              # Sowing date, variety, & irrigation generators
-│       │   ├── models/                  # Scenario run & comparison ORM models
-│       │   ├── runners/                 # Scenario sweep execution runner
-│       │   ├── schemas/                 # Scenario request schemas
-│       │   └── services/                # Sowing date shift & WUE comparison engine
 │       ├── services/                    # Core business logic services
-│       │   ├── simulation_service.py    # WOFOST execution coordinator
-│       │   ├── weather_service.py       # Hybrid weather service router
-│       │   ├── soil_service.py          # Pedotransfer soil parameter calculator
-│       │   ├── temporal_interpolation_service.py # Monsoon gap-filling interpolator
-│       │   ├── spatial_alignment_service.py # Geospatial polygon grid aligner
-│       │   ├── confidence_estimator.py   # Observation error matrix R generator
-│       │   ├── multi_source_fusion_service.py # Bayesian multi-source fusion engine
-│       │   ├── data_fusion_pipeline.py  # End-to-end Module 3.3 fusion pipeline
-│       │   ├── forecast_service.py      # Ensemble forward trajectory forecast service
-│       │   └── error_correction_service.py # Diagnostic residual service (Deprecated direct DB mutation)
 │       ├── simulation/                  # PCSE WOFOST Engine Adapters
-│       │   ├── engine.py                # WOFOST 7.2 execution runner
-│       │   ├── agromanagement.py        # Agromanagement parser & rice DVSI fix
-│       │   ├── crop_provider.py         # Crop parameter file reader
-│       │   ├── soil_provider.py         # PCSE soil parameter struct builder
-│       │   ├── site_provider.py         # PCSE site parameter builder
-│       │   ├── weather_provider.py      # PCSE weather provider builder
-│       │   └── output_parser.py         # Raw PCSE dict parser
-│       └── twin/                        # Digital Twin high-level field state representation
+│       └── twin/                        # Digital Twin field state representation
 ├── docs/                                # Technical specifications & architectural documentation
-│   ├── era5_land_integration.md         # ERA5-Land hybrid weather & soil moisture doc
-│   ├── satellite_ndre_fetcher.md        # Sentinel-2 NDRE LAI pipeline doc
-│   ├── w_shape_grvi_protocol.md         # Smartphone 5-photo GRVI protocol doc
-│   ├── enkf_design.md                   # Ensemble Kalman Filter design specification
-│   ├── state_variables.md               # WOFOST physical state variables reference
-│   ├── database_schema.md               # Complete database schema reference
-│   └── simulation_pipeline.md           # PCSE simulation pipeline guide
-├── external_repos/                      # Parameter repositories (WOFOST crop files)
+├── external_repos/                      # Parameter repositories (WOFOST crop files & PCSE)
+├── frontend/                            # React + Vite + Tailwind Web Frontend Application
+│   ├── src/                             # React application source code
+│   │   ├── api/                         # API client mapping live backend endpoints
+│   │   ├── components/                  # UI components & design system
+│   │   ├── App.tsx                      # Multi-page router & navigation layout
+│   │   └── main.tsx                     # React entrypoint
+│   ├── .env                             # Frontend environment configuration (VITE_API_BASE_URL)
+│   ├── package.json                     # Frontend package manifest & scripts
+│   ├── tsconfig.json                    # TypeScript compiler configuration
+│   └── vite.config.ts                   # Vite build & development proxy configuration
+├── lib/                                 # Shared TypeScript API contracts & client packages
 ├── scripts/                             # Verification & data fetch scripts
-│   ├── fetch_satellite_data.py          # Standalone satellite fetch script
-│   └── verify_satellite_integration.py  # Integration test script for remote sensing
 ├── tests/                               # Comprehensive unit & integration test suite (290 tests)
 ├── alembic.ini                          # Alembic configuration
+├── package.json                         # Workspace root package manifest
+├── pnpm-workspace.yaml                  # pnpm workspace package definitions
 ├── pyproject.toml                       # Python project configuration
 ├── pytest.ini                            # Pytest configuration
-├── requirements.txt                     # Production requirements specification
-├── run_demo.py                          # Complete end-to-end EnKF demonstration script
-└── uv.lock                              # Dependency lock file
+├── requirements.txt                     # Production Python requirements specification
+└── run_demo.py                          # Complete end-to-end EnKF demonstration script
 ```
 
 ---

@@ -17,7 +17,7 @@ from backend.app.services.multi_source_fusion_service import MultiSourceFusionSe
 from backend.app.services.data_fusion_pipeline import DataFusionPipeline
 from backend.app.services.temporal_interpolation_service import TemporalInterpolationService
 
-router = APIRouter(prefix="/fusion", tags=["Data Fusion (Module 3.3)"])
+router = APIRouter(tags=["Data Fusion (Module 3.3)"])
 
 @router.post(
     "/fill-gaps",

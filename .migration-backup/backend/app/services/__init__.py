@@ -1,1 +1,0 @@
-# AgriTwin services layer

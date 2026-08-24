@@ -25,16 +25,55 @@ Mathematical foundation:
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
 from backend.app.assimilation.state.state_vector import STATE_DIM, STATE_INDEX, STATE_VARIABLES
 
 
+class UnsupportedObservationError(ValueError):
+    """Raised when an observation cannot be mapped to the model state vector due to missing vertical/hydrological model information."""
+    pass
+
+
 class BaseObservationOperator(ABC):
-    """Abstract Base Class for observation operators h(x)."""
+    """Abstract Base Class for observation operators h(x).
+
+    Attributes:
+        observation_depth: Sensing depth or vertical profile range (e.g., "0-5 cm", "0-100 cm").
+        observation_support: Physical/spatial support type (e.g., "surface_skin", "root_zone", "direct_state").
+        model_target_variable: Targeted WOFOST state variable (e.g., "SM", "LAI").
+        operator_type: Identifier of operator implementation class.
+        uncertainty: Standard deviation of observation error.
+    """
+
+    def __init__(
+        self,
+        observation_depth: str = "unspecified",
+        observation_support: str = "unspecified",
+        model_target_variable: str = "unspecified",
+        operator_type: str = "BaseObservationOperator",
+        uncertainty: Optional[float] = None,
+    ) -> None:
+        self.observation_depth = observation_depth
+        self.observation_support = observation_support
+        self.model_target_variable = model_target_variable
+        self.operator_type = operator_type
+        self.uncertainty = uncertainty
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Return comprehensive metadata for observation provenance audit."""
+        return {
+            "observation_depth": self.observation_depth,
+            "observation_support": self.observation_support,
+            "model_target_variable": self.model_target_variable,
+            "operator_type": self.operator_type,
+            "uncertainty": self.uncertainty,
+        }
 
     @abstractmethod
     def apply(self, x: np.ndarray) -> np.ndarray:
@@ -58,16 +97,7 @@ class BaseObservationOperator(ABC):
         R: np.ndarray,
         seed: Optional[int] = None,
     ) -> np.ndarray:
-        """Sample synthetic observation y = h(x) + v, where v ~ N(0, R).
-
-        Args:
-            x: State vector (n,) or ensemble (n, N).
-            R: Observation error covariance matrix of shape (m, m).
-            seed: Optional random seed for reproducibility.
-
-        Returns:
-            Observation y of shape (m,) or perturbed observation matrix (m, N).
-        """
+        """Sample synthetic observation y = h(x) + v, where v ~ N(0, R)."""
         hx = self.apply(x)
         m = R.shape[0]
         rng = np.random.default_rng(seed)
@@ -92,19 +122,26 @@ class DirectObservationOperator(BaseObservationOperator):
     """Observation operator for direct state variable measurements (h(x) = H * x).
 
     Maps selected state vector indices to observation space via linear matrix H.
-    Used for direct LAI, SM, TAGP, etc. observations.
-
-    Args:
-        observed_indices: List or 1D array of state variable indices [0..n-1]
-                          corresponding to observations in vector y.
-        state_dim: Full state space dimension n (default STATE_DIM=10).
+    Used for direct LAI, root-zone SM, TAGP, etc. observations where the sensor
+    directly measures the target model variable.
     """
 
     def __init__(
         self,
         observed_indices: Union[list[int], np.ndarray],
         state_dim: int = STATE_DIM,
+        observation_depth: str = "0-100 cm",
+        observation_support: str = "root_zone",
+        model_target_variable: str = "direct_state",
+        uncertainty: Optional[float] = None,
     ) -> None:
+        super().__init__(
+            observation_depth=observation_depth,
+            observation_support=observation_support,
+            model_target_variable=model_target_variable,
+            operator_type="DirectObservationOperator",
+            uncertainty=uncertainty,
+        )
         self.observed_indices = np.array(observed_indices, dtype=int)
         self.state_dim = state_dim
         self.m = len(self.observed_indices)
@@ -125,6 +162,7 @@ class DirectObservationOperator(BaseObservationOperator):
         cls,
         variables: list[str],
         state_dim: int = STATE_DIM,
+        uncertainty: Optional[float] = None,
     ) -> "DirectObservationOperator":
         """Construct DirectObservationOperator from variable names (e.g. ['lai', 'sm'])."""
         indices = []
@@ -133,7 +171,12 @@ class DirectObservationOperator(BaseObservationOperator):
             if var_lower not in STATE_INDEX:
                 raise KeyError(f"Variable {var!r} not in STATE_VARIABLES: {STATE_VARIABLES}")
             indices.append(STATE_INDEX[var_lower])
-        return cls(observed_indices=indices, state_dim=state_dim)
+        return cls(
+            observed_indices=indices,
+            state_dim=state_dim,
+            model_target_variable=",".join(variables),
+            uncertainty=uncertainty,
+        )
 
     @property
     def matrix(self) -> np.ndarray:
@@ -141,14 +184,7 @@ class DirectObservationOperator(BaseObservationOperator):
         return self._H
 
     def apply(self, x: np.ndarray) -> np.ndarray:
-        """Compute h(x) = H * x or H * X_f.
-
-        Args:
-            x: 1D state vector (n,) or 2D ensemble matrix (n, N).
-
-        Returns:
-            Observation projection of shape (m,) or (m, N).
-        """
+        """Compute h(x) = H * x or H * X_f."""
         if x.ndim == 1:
             if x.shape[0] != self.state_dim:
                 raise ValueError(
@@ -165,13 +201,121 @@ class DirectObservationOperator(BaseObservationOperator):
             raise ValueError(f"Expected 1D or 2D array for x, got {x.ndim}D.")
 
 
-class ObservationModel:
-    """Encapsulates the complete observation equation y = h(x) + v, v ~ N(0, R).
+class SurfaceSoilMoistureObservationOperator(BaseObservationOperator):
+    """Observation operator for surface-sensitive remote sensing soil moisture (h(x) = h_surf(x)).
 
-    Attributes:
-        operator: BaseObservationOperator mapping state space to observation space.
-        R: Observation error covariance matrix of shape (m, m).
+    Used for satellite microwave radiometry/radar (e.g. SMAP, Sentinel-1 SAR) that senses only the
+    top surface skin layer (0-5 cm).
+
+    Scientific Invariant:
+    - Does NOT assume surface SM equals root-zone SM.
+    - Does NOT invent arbitrary conversion coefficients or fabricate synthetic observations.
+    - Does NOT modify EnKF mathematics.
+    - If vertical hydrology / 1D soil layer model information is unconfigured/unavailable, fails explicitly
+      by raising UnsupportedObservationError rather than silently performing an invalid direct mapping.
     """
+
+    def __init__(
+        self,
+        observed_indices: Union[list[int], np.ndarray],
+        state_dim: int = STATE_DIM,
+        observation_depth: str = "0-5 cm",
+        observation_support: str = "surface_skin",
+        model_target_variable: str = "SM",
+        uncertainty: Optional[float] = 0.04,
+        hydrology_model: Optional[Any] = None,
+    ) -> None:
+        super().__init__(
+            observation_depth=observation_depth,
+            observation_support=observation_support,
+            model_target_variable=model_target_variable,
+            operator_type="SurfaceSoilMoistureObservationOperator",
+            uncertainty=uncertainty,
+        )
+        self.observed_indices = np.array(observed_indices, dtype=int)
+        self.state_dim = state_dim
+        self.m = len(self.observed_indices)
+        self.hydrology_model = hydrology_model
+
+    def apply(self, x: np.ndarray) -> np.ndarray:
+        """Apply surface observation operator.
+
+        Raises UnsupportedObservationError when no vertical hydrology model is present,
+        preventing silent direct mapping of 0-5 cm surface observations to WOFOST root-zone SM.
+        """
+        if self.hydrology_model is not None and hasattr(self.hydrology_model, "get_surface_moisture"):
+            return self.hydrology_model.get_surface_moisture(x)
+
+        raise UnsupportedObservationError(
+            "Surface-to-root-zone soil moisture transformation is unsupported because vertical "
+            "hydrological/soil layer discretization is not configured. Direct mapping of 0-5 cm "
+            "surface remote sensing observations to WOFOST root-zone SM is non-equivalent and rejected."
+        )
+
+
+def get_observation_operator(
+    variable_name: str,
+    source: Optional[str] = None,
+    observed_indices: Optional[Union[list[int], np.ndarray]] = None,
+    uncertainty: Optional[float] = None,
+    hydrology_model: Optional[Any] = None,
+    state_dim: int = STATE_DIM,
+) -> BaseObservationOperator:
+    """Factory function selecting the appropriate observation operator based on variable and source provenance.
+
+    Args:
+        variable_name: Name of observed variable (e.g., 'SM', 'LAI').
+        source: Provenance source string (e.g., 'SATELLITE', 'SENTINEL1_SAR', 'SENSOR', 'IOT_SENSOR').
+        observed_indices: State vector indices observed.
+        uncertainty: Observation uncertainty standard deviation.
+        hydrology_model: Optional vertical soil hydrology transformation module.
+        state_dim: Dimension of state vector.
+
+    Returns:
+        BaseObservationOperator (DirectObservationOperator or SurfaceSoilMoistureObservationOperator).
+    """
+    var_upper = str(variable_name).upper()
+    src_upper = str(source).upper() if source else ""
+
+    if observed_indices is None:
+        if var_upper in ("ROOT_ZONE_SOIL_MOISTURE", "ROOT_ZONE_SM", "SURFACE_SOIL_MOISTURE", "SURFACE_SM"):
+            idx = STATE_INDEX.get("sm")
+        else:
+            idx = STATE_INDEX.get(var_upper.lower())
+        observed_indices = [idx] if idx is not None else [1]
+
+    # Identify remote sensing or explicit surface soil moisture
+    is_surface_sm = (
+        var_upper in ("SURFACE_SOIL_MOISTURE", "SURFACE_SM") or
+        (var_upper == "SM" and src_upper in ("SATELLITE", "SENTINEL1", "SENTINEL1_SAR", "SENTINEL-1", "SMAP"))
+    )
+
+    if is_surface_sm:
+        return SurfaceSoilMoistureObservationOperator(
+            observed_indices=observed_indices,
+            state_dim=state_dim,
+            observation_depth="0-5 cm",
+            observation_support="surface_skin",
+            model_target_variable="SM",
+            uncertainty=uncertainty,
+            hydrology_model=hydrology_model,
+        )
+
+    depth = "0-100 cm" if var_upper in ("SM", "ROOT_ZONE_SOIL_MOISTURE", "ROOT_ZONE_SM") else "canopy/crop"
+    support = "root_zone" if var_upper in ("SM", "ROOT_ZONE_SOIL_MOISTURE", "ROOT_ZONE_SM") else "direct_state"
+
+    return DirectObservationOperator(
+        observed_indices=observed_indices,
+        state_dim=state_dim,
+        observation_depth=depth,
+        observation_support=support,
+        model_target_variable=var_upper,
+        uncertainty=uncertainty,
+    )
+
+
+class ObservationModel:
+    """Encapsulates the complete observation equation y = h(x) + v, v ~ N(0, R)."""
 
     def __init__(
         self,
@@ -198,3 +342,4 @@ class ObservationModel:
     def sample_observations(self, x: np.ndarray, seed: Optional[int] = None) -> np.ndarray:
         """Sample synthetic observations y = h(x) + v."""
         return self.operator.observe_with_noise(x, self.R, seed=seed)
+

@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 VARIABLE_DEFAULT_UNITS: dict[str, str] = {
     "LAI": "m2/m2",
     "SM": "cm3/cm3",
+    "ROOT_ZONE_SOIL_MOISTURE": "cm3/cm3",
+    "ROOT_ZONE_SM": "cm3/cm3",
+    "SURFACE_SOIL_MOISTURE": "cm3/cm3",
+    "SURFACE_SM": "cm3/cm3",
     "TAGP": "kg/ha",
     "TWSO": "kg/ha",
     "TWLV": "kg/ha",
@@ -61,6 +65,10 @@ VARIABLE_DEFAULT_UNITS: dict[str, str] = {
 VARIABLE_DEFAULT_UNCERTAINTY: dict[str, float] = {
     "LAI": 0.30,
     "SM": 0.04,
+    "ROOT_ZONE_SOIL_MOISTURE": 0.04,
+    "ROOT_ZONE_SM": 0.04,
+    "SURFACE_SOIL_MOISTURE": 0.04,
+    "SURFACE_SM": 0.04,
     "TAGP": 500.0,
     "TWSO": 200.0,
     "TWLV": 100.0,
@@ -192,12 +200,30 @@ class ObservationRegistryService:
         raw_payload = data.get("raw_payload") or {}
         if not isinstance(raw_payload, dict):
             raw_payload = {"original_payload": raw_payload}
-        raw_payload["_registry_metadata"] = {
+        reg_meta = {
             "registered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "inferred_units": data["units"],
             "inferred_uncertainty": data["uncertainty"],
             "normalized_source": src_enum.value,
         }
+        if var_name in ("SURFACE_SOIL_MOISTURE", "SURFACE_SM"):
+            reg_meta["observation_depth"] = "0-5 cm"
+            reg_meta["observation_support"] = "surface_skin"
+            reg_meta["model_target_variable"] = "SM"
+        elif var_name in ("ROOT_ZONE_SOIL_MOISTURE", "ROOT_ZONE_SM"):
+            reg_meta["observation_depth"] = "0-100 cm"
+            reg_meta["observation_support"] = "root_zone"
+            reg_meta["model_target_variable"] = "SM"
+        elif var_name == "SM":
+            if src_enum.value in ("SATELLITE", "SENTINEL1_SAR"):
+                reg_meta["observation_depth"] = "0-5 cm"
+                reg_meta["observation_support"] = "surface_skin"
+                reg_meta["model_target_variable"] = "SM"
+            else:
+                reg_meta["observation_depth"] = "0-100 cm"
+                reg_meta["observation_support"] = "root_zone"
+                reg_meta["model_target_variable"] = "SM"
+        raw_payload["_registry_metadata"] = reg_meta
         data["raw_payload"] = raw_payload
 
         return data
